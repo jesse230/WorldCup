@@ -1,0 +1,16 @@
+{
+  "name": "world-cup-2026-predictor",
+  "version": "0.1.0",
+  "private": true,
+  "description": "A lightweight World Cup 2026 Monte Carlo predictor",
+  "scripts": {
+    "start": "node server.js",
+    "simulate": "node src/cli.js",
+    "update-squads": "node scripts/update-squads.js",
+    "fetch-squads": "node scripts/fetch-squads.js",
+    "fetch-results": "node scripts/fetch-results.js"
+  },
+  "dependencies": {
+    "@supabase/supabase-js": "^2.57.0"
+  }
+}

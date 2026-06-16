@@ -1,0 +1,61 @@
+[
+  { "name": "Mexico", "group": "A", "rating": 1860, "confederation": "CONCACAF", "host": true },
+  { "name": "South Africa", "group": "A", "rating": 1650, "confederation": "CAF" },
+  { "name": "Korea Republic", "group": "A", "rating": 1785, "confederation": "AFC" },
+  { "name": "Czechia", "group": "A", "rating": 1765, "confederation": "UEFA" },
+
+  { "name": "Canada", "group": "B", "rating": 1790, "confederation": "CONCACAF", "host": true },
+  { "name": "Bosnia and Herzegovina", "group": "B", "rating": 1670, "confederation": "UEFA" },
+  { "name": "Qatar", "group": "B", "rating": 1640, "confederation": "AFC" },
+  { "name": "Switzerland", "group": "B", "rating": 1840, "confederation": "UEFA" },
+
+  { "name": "Brazil", "group": "C", "rating": 2105, "confederation": "CONMEBOL" },
+  { "name": "Morocco", "group": "C", "rating": 1820, "confederation": "CAF" },
+  { "name": "Haiti", "group": "C", "rating": 1570, "confederation": "CONCACAF" },
+  { "name": "Scotland", "group": "C", "rating": 1790, "confederation": "UEFA" },
+
+  { "name": "United States", "group": "D", "rating": 1830, "confederation": "CONCACAF", "host": true },
+  { "name": "Paraguay", "group": "D", "rating": 1775, "confederation": "CONMEBOL" },
+  { "name": "Australia", "group": "D", "rating": 1765, "confederation": "AFC" },
+  { "name": "Turkiye", "group": "D", "rating": 1815, "confederation": "UEFA" },
+
+  { "name": "Germany", "group": "E", "rating": 1995, "confederation": "UEFA" },
+  { "name": "Curacao", "group": "E", "rating": 1545, "confederation": "CONCACAF", "debut": true },
+  { "name": "Cote d'Ivoire", "group": "E", "rating": 1765, "confederation": "CAF" },
+  { "name": "Ecuador", "group": "E", "rating": 1815, "confederation": "CONMEBOL" },
+
+  { "name": "Netherlands", "group": "F", "rating": 2010, "confederation": "UEFA" },
+  { "name": "Japan", "group": "F", "rating": 1845, "confederation": "AFC" },
+  { "name": "Sweden", "group": "F", "rating": 1800, "confederation": "UEFA" },
+  { "name": "Tunisia", "group": "F", "rating": 1695, "confederation": "CAF" },
+
+  { "name": "Belgium", "group": "G", "rating": 1910, "confederation": "UEFA" },
+  { "name": "Egypt", "group": "G", "rating": 1710, "confederation": "CAF" },
+  { "name": "IR Iran", "group": "G", "rating": 1760, "confederation": "AFC" },
+  { "name": "New Zealand", "group": "G", "rating": 1615, "confederation": "OFC" },
+
+  { "name": "Spain", "group": "H", "rating": 2085, "confederation": "UEFA" },
+  { "name": "Cabo Verde", "group": "H", "rating": 1635, "confederation": "CAF", "debut": true },
+  { "name": "Saudi Arabia", "group": "H", "rating": 1675, "confederation": "AFC" },
+  { "name": "Uruguay", "group": "H", "rating": 1930, "confederation": "CONMEBOL" },
+
+  { "name": "France", "group": "I", "rating": 2115, "confederation": "UEFA" },
+  { "name": "Senegal", "group": "I", "rating": 1805, "confederation": "CAF" },
+  { "name": "Iraq", "group": "I", "rating": 1655, "confederation": "AFC" },
+  { "name": "Norway", "group": "I", "rating": 1870, "confederation": "UEFA" },
+
+  { "name": "Argentina", "group": "J", "rating": 2140, "confederation": "CONMEBOL" },
+  { "name": "Algeria", "group": "J", "rating": 1715, "confederation": "CAF" },
+  { "name": "Austria", "group": "J", "rating": 1810, "confederation": "UEFA" },
+  { "name": "Jordan", "group": "J", "rating": 1600, "confederation": "AFC", "debut": true },
+
+  { "name": "Portugal", "group": "K", "rating": 2025, "confederation": "UEFA" },
+  { "name": "Congo DR", "group": "K", "rating": 1660, "confederation": "CAF" },
+  { "name": "Uzbekistan", "group": "K", "rating": 1625, "confederation": "AFC", "debut": true },
+  { "name": "Colombia", "group": "K", "rating": 1905, "confederation": "CONMEBOL" },
+
+  { "name": "England", "group": "L", "rating": 2055, "confederation": "UEFA" },
+  { "name": "Croatia", "group": "L", "rating": 1885, "confederation": "UEFA" },
+  { "name": "Ghana", "group": "L", "rating": 1680, "confederation": "CAF" },
+  { "name": "Panama", "group": "L", "rating": 1690, "confederation": "CONCACAF" }
+]

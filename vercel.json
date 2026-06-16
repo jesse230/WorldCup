@@ -1,0 +1,12 @@
+{
+  "crons": [
+    {
+      "path": "/api/refresh?target=squads",
+      "schedule": "0 6 * * *"
+    },
+    {
+      "path": "/api/refresh?target=results",
+      "schedule": "0 */4 * * *"
+    }
+  ]
+}

@@ -1,0 +1,128 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1">
+    <title>World Cup 2026 Predictor</title>
+    <link rel="preconnect" href="https://fonts.googleapis.com">
+    <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+    <link rel="stylesheet" href="./styles.css">
+  </head>
+  <body>
+    <main class="shell">
+      <section class="hero">
+        <div class="hero-copy">
+          <p class="eyebrow">World Cup 2026 Predictor</p>
+          <h1>Match picks, group odds, and tournament forecasts in one match-center.</h1>
+          <p class="lede">
+            Forecast today’s fixtures, track how often the model gets real results right, and keep
+            a running read on the whole tournament.
+          </p>
+        </div>
+        <div class="hero-scoreboard" id="tracker-summary"></div>
+      </section>
+
+      <section class="panel tracker-panel">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Prediction Tracker</p>
+            <h2>How the model is doing on completed matches</h2>
+          </div>
+          <small id="tracker-stamp"></small>
+        </div>
+        <div id="tracker-list" class="tracker-list"></div>
+      </section>
+
+      <section class="panel today-panel">
+        <div class="today-heading">
+          <div>
+            <p class="eyebrow">Daily Matchups</p>
+            <h2>Fixtures for <span id="today-label"></span></h2>
+          </div>
+          <label class="date-picker">
+            Date
+            <input id="selected-date" type="date">
+          </label>
+        </div>
+        <div id="today-cards" class="today-cards"></div>
+      </section>
+
+      <section class="panel controls">
+        <label>
+          Simulations
+          <input id="simulations" type="number" min="100" step="100" value="5000">
+        </label>
+        <label>
+          Seed
+          <input id="seed" type="number" value="20260611">
+        </label>
+        <button id="run" type="button">Run Predictor</button>
+      </section>
+
+      <section class="panel">
+        <h2>Model assumptions</h2>
+        <div id="assumptions" class="assumptions"></div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Outright Market</p>
+            <h2>Top title chances</h2>
+          </div>
+        </div>
+        <table id="top-table">
+          <thead>
+            <tr>
+              <th>#</th>
+              <th>Team</th>
+              <th>Group</th>
+              <th>Rating</th>
+              <th>Adj Rt</th>
+              <th>Win</th>
+              <th>Advance</th>
+              <th>Final</th>
+              <th>Semi</th>
+            </tr>
+          </thead>
+          <tbody></tbody>
+        </table>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Group Stage</p>
+            <h2>Group qualification odds</h2>
+          </div>
+        </div>
+        <div id="group-grid" class="group-grid"></div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Watch List</p>
+            <h2>Most balanced group matches</h2>
+          </div>
+        </div>
+        <div id="match-forecasts" class="match-grid"></div>
+      </section>
+
+      <section class="panel">
+        <div class="section-head">
+          <div>
+            <p class="eyebrow">Simulation Run</p>
+            <h2>Sample tournament path</h2>
+          </div>
+        </div>
+        <div id="sample-bracket"></div>
+      </section>
+    </main>
+
+    <script src="./src/browser-predictor.js"></script>
+    <script src="./src/browser-fixtures.js"></script>
+    <script src="./src/app.js"></script>
+  </body>
+</html>
