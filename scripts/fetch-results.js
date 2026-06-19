@@ -36,7 +36,10 @@ function decodeHtml(value) {
 }
 
 function stripTags(value) {
-  return decodeHtml(value.replace(/<[^>]+>/g, " ").replace(/\s+/g, " ").trim());
+  return decodeHtml(value.replace(/<[^>]+>/g, " "))
+    .replace(/[\u00a0\u2007\u202f]/g, " ")
+    .replace(/\s+/g, " ")
+    .trim();
 }
 
 function loadJson(filePath) {
