@@ -82,16 +82,35 @@ function extractIsoDate(dateHtml) {
 
 function parseFootballBoxes(html, groupName, validTeams) {
   const matches = [];
-  const regex =
-    /<div itemscope="" itemtype="http&#58;\/\/schema\.org\/SportsEvent" class="footballbox"[\s\S]*?<div class="fdate">([\s\S]*?)<\/div>[\s\S]*?<th class="fhome"[\s\S]*?<span itemprop="name">([\s\S]*?)<\/span><\/th><th class="fscore">([\d]+)[^\d<]+([\d]+)<\/th><th class="faway"[\s\S]*?<span itemprop="name">([\s\S]*?)<\/span><\/th>/gi;
-  let match;
+  const startToken = '<div itemscope="" itemtype="http&#58;//schema.org/SportsEvent" class="footballbox"';
+  const chunks = [];
+  let cursor = 0;
 
-  while ((match = regex.exec(html)) !== null) {
-    const isoDate = extractIsoDate(match[1]);
-    const teamA = normalizeTeamName(stripTags(match[2]));
-    const scoreA = Number(match[3]);
-    const scoreB = Number(match[4]);
-    const teamB = normalizeTeamName(stripTags(match[5]));
+  while (cursor < html.length) {
+    const start = html.indexOf(startToken, cursor);
+    if (start === -1) {
+      break;
+    }
+
+    const nextStart = html.indexOf(startToken, start + startToken.length);
+    chunks.push(html.slice(start, nextStart === -1 ? html.length : nextStart));
+    cursor = nextStart === -1 ? html.length : nextStart;
+  }
+
+  for (const chunk of chunks) {
+    const dateMatch = chunk.match(/<div class="fdate">([\s\S]*?)<\/div>/i);
+    const teamMatches = [...chunk.matchAll(/<span itemprop="name">([\s\S]*?)<\/span>/gi)];
+    const scoreMatch = chunk.match(/<th class="fscore">(\d+)[^\d<]+(\d+)<\/th>/i);
+
+    if (!dateMatch || teamMatches.length < 2 || !scoreMatch) {
+      continue;
+    }
+
+    const isoDate = extractIsoDate(dateMatch[1]);
+    const teamA = normalizeTeamName(stripTags(teamMatches[0][1]));
+    const teamB = normalizeTeamName(stripTags(teamMatches[1][1]));
+    const scoreA = Number(scoreMatch[1]);
+    const scoreB = Number(scoreMatch[2]);
 
     if (!isoDate || !validTeams.has(teamA) || !validTeams.has(teamB)) {
       continue;
@@ -107,6 +126,7 @@ function parseFootballBoxes(html, groupName, validTeams) {
     });
   }
 
+  console.log(`Group ${groupName}: ${matches.length} matches parsed.`);
   return matches;
 }
 
