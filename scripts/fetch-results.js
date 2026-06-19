@@ -47,7 +47,18 @@ function buildValidTeamSet() {
   return new Set(teams.map((team) => team.name));
 }
 
-function toIsoDate(monthName, day, year) {
+function extractIsoDate(dateHtml) {
+  const hiddenIsoMatch = dateHtml.match(/(\d{4}-\d{2}-\d{2})/);
+  if (hiddenIsoMatch) {
+    return hiddenIsoMatch[1];
+  }
+
+  const dateText = stripTags(dateHtml);
+  const parsedDateMatch = dateText.match(/([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})/);
+  if (!parsedDateMatch) {
+    return null;
+  }
+
   const months = {
     January: 1,
     February: 2,
@@ -63,9 +74,9 @@ function toIsoDate(monthName, day, year) {
     December: 12
   };
 
-  const month = `${months[monthName]}`.padStart(2, "0");
-  const date = `${day}`.padStart(2, "0");
-  return `${year}-${month}-${date}`;
+  const month = `${months[parsedDateMatch[1]]}`.padStart(2, "0");
+  const day = `${parsedDateMatch[2]}`.padStart(2, "0");
+  return `${parsedDateMatch[3]}-${month}-${day}`;
 }
 
 function parseFootballBoxes(html, groupName, validTeams) {
@@ -75,23 +86,18 @@ function parseFootballBoxes(html, groupName, validTeams) {
   let match;
 
   while ((match = regex.exec(html)) !== null) {
-    const dateText = stripTags(match[1]);
+    const isoDate = extractIsoDate(match[1]);
     const teamA = normalizeTeamName(stripTags(match[2]));
     const scoreA = Number(match[3]);
     const scoreB = Number(match[4]);
     const teamB = normalizeTeamName(stripTags(match[5]));
 
-    if (!validTeams.has(teamA) || !validTeams.has(teamB)) {
-      continue;
-    }
-
-    const isoDateMatch = dateText.match(/([A-Za-z]+)\s+(\d{1,2}),\s+(\d{4})/);
-    if (!isoDateMatch) {
+    if (!isoDate || !validTeams.has(teamA) || !validTeams.has(teamB)) {
       continue;
     }
 
     matches.push({
-      date: toIsoDate(isoDateMatch[1], Number(isoDateMatch[2]), Number(isoDateMatch[3])),
+      date: isoDate,
       group: groupName,
       teamA,
       teamB,
@@ -127,7 +133,8 @@ function wait(ms) {
 }
 
 function extractGroupSections(html) {
-  const headingRegex = /<h3[^>]*id="Group_([A-L])"[^>]*>[\s\S]*?<\/h3>/g;
+  const headingRegex =
+    /<div class="mw-heading mw-heading3"><h3 id="Group_([A-L])">[\s\S]*?<\/h3>[\s\S]*?<\/div>/g;
   const headings = [];
   let match;
 
@@ -147,23 +154,34 @@ function extractGroupSections(html) {
   });
 }
 
+function dedupeMatches(matches) {
+  const byKey = new Map();
+
+  for (const match of matches) {
+    const key = [match.date, match.group, match.teamA, match.teamB].join("__");
+    byKey.set(key, match);
+  }
+
+  return [...byKey.values()];
+}
+
 async function refreshResults(options = {}) {
   const { persist = true } = options;
   const validTeams = buildValidTeamSet();
   const payload = await fetchWithRetry(sourceUrl, "2026_FIFA_World_Cup");
   const html = payload?.parse?.text || "";
   const sections = extractGroupSections(html);
-  const allMatches = sections.flatMap((section) =>
-    parseFootballBoxes(section.html, section.group, validTeams)
-  );
-
-  allMatches.sort((a, b) => {
-    return (
-      a.date.localeCompare(b.date) ||
-      a.group.localeCompare(b.group) ||
-      a.teamA.localeCompare(b.teamA)
-    );
-  });
+  const allMatches = dedupeMatches(
+    sections.flatMap((section) => parseFootballBoxes(section.html, section.group, validTeams))
+  )
+    .filter((match) => Number.isFinite(match.scoreA) && Number.isFinite(match.scoreB))
+    .sort((a, b) => {
+      return (
+        a.date.localeCompare(b.date) ||
+        a.group.localeCompare(b.group) ||
+        a.teamA.localeCompare(b.teamA)
+      );
+    });
 
   if (persist) {
     fs.writeFileSync(resultsPath, `${JSON.stringify(allMatches, null, 2)}\n`, "utf8");
