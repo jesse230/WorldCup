@@ -6,6 +6,7 @@ const resultsPath = path.join(rootDir, "data", "results-2026.json");
 const teamsPath = path.join(rootDir, "data", "teams-2026-qualified.json");
 const sourceUrl =
   "https://en.wikipedia.org/w/api.php?action=parse&page=2026_FIFA_World_Cup&prop=text&formatversion=2&format=json";
+const REQUEST_TIMEOUT_MS = 12000;
 
 const TEAM_NAME_ALIASES = {
   "Czech Republic": "Czechia",
@@ -110,10 +111,13 @@ function parseFootballBoxes(html, groupName, validTeams) {
 }
 
 async function fetchWithRetry(url, label, attempt = 1) {
+  console.log(`Fetching ${label} (attempt ${attempt})`);
+
   const response = await fetch(url, {
     headers: {
       "User-Agent": "world-cup-2026-predictor/0.1"
-    }
+    },
+    signal: AbortSignal.timeout(REQUEST_TIMEOUT_MS)
   });
 
   if (response.ok) {
@@ -171,6 +175,7 @@ async function refreshResults(options = {}) {
   const payload = await fetchWithRetry(sourceUrl, "2026_FIFA_World_Cup");
   const html = payload?.parse?.text || "";
   const sections = extractGroupSections(html);
+  console.log(`Found ${sections.length} group sections in tournament page.`);
   const allMatches = dedupeMatches(
     sections.flatMap((section) => parseFootballBoxes(section.html, section.group, validTeams))
   )
@@ -182,6 +187,8 @@ async function refreshResults(options = {}) {
         a.teamA.localeCompare(b.teamA)
       );
     });
+
+  console.log(`Parsed ${allMatches.length} completed group-stage matches.`);
 
   if (persist) {
     fs.writeFileSync(resultsPath, `${JSON.stringify(allMatches, null, 2)}\n`, "utf8");
