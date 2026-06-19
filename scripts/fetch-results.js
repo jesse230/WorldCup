@@ -99,16 +99,17 @@ function parseFootballBoxes(html, groupName, validTeams) {
 
   for (const chunk of chunks) {
     const dateMatch = chunk.match(/<div class="fdate">([\s\S]*?)<\/div>/i);
-    const teamMatches = [...chunk.matchAll(/<span itemprop="name">([\s\S]*?)<\/span>/gi)];
+    const homeCellMatch = chunk.match(/<th class="fhome"[\s\S]*?>([\s\S]*?)<\/th>/i);
+    const awayCellMatch = chunk.match(/<th class="faway"[\s\S]*?>([\s\S]*?)<\/th>/i);
     const scoreCellMatch = chunk.match(/<th class="fscore">([\s\S]*?)<\/th>/i);
 
-    if (!dateMatch || teamMatches.length < 2 || !scoreCellMatch) {
+    if (!dateMatch || !homeCellMatch || !awayCellMatch || !scoreCellMatch) {
       continue;
     }
 
     const isoDate = extractIsoDate(dateMatch[1]);
-    const teamA = normalizeTeamName(stripTags(teamMatches[0][1]));
-    const teamB = normalizeTeamName(stripTags(teamMatches[1][1]));
+    const teamA = normalizeTeamName(stripTags(homeCellMatch[1]));
+    const teamB = normalizeTeamName(stripTags(awayCellMatch[1]));
     const scoreText = stripTags(scoreCellMatch[1]);
     const scoreParts = scoreText.match(/(\d+)\s*[-–]\s*(\d+)/);
 
