@@ -43,6 +43,8 @@ async function main() {
   const matchForecasts = document.querySelector("#match-forecasts");
   const todayCards = document.querySelector("#today-cards");
   const todayLabel = document.querySelector("#today-label");
+  const modelStatus = document.querySelector("#model-status");
+  const featuredMatch = document.querySelector("#featured-match");
   const trackerSummary = document.querySelector("#tracker-summary");
   const trackerList = document.querySelector("#tracker-list");
   const trackerStamp = document.querySelector("#tracker-stamp");
@@ -225,6 +227,105 @@ async function main() {
       .join("");
   }
 
+  function buildFeaturedFixture(result, dailyFixtures) {
+    const forecasts = fixtureForecastMap(result);
+    const candidates = dailyFixtures
+      .map((fixture) => {
+        const forecast = lookupForecast(forecasts, fixture.teamA, fixture.teamB);
+        if (!forecast) {
+          return null;
+        }
+
+        const combinedWeight =
+          (forecast.adjustedRatingA || 0) +
+          (forecast.adjustedRatingB || 0) +
+          Math.abs((forecast.teamAWin || 0) - (forecast.teamBWin || 0)) * 120;
+
+        return {
+          fixture,
+          forecast,
+          weight: combinedWeight
+        };
+      })
+      .filter(Boolean)
+      .sort((left, right) => right.weight - left.weight);
+
+    return candidates[0] || null;
+  }
+
+  function renderModelStatus(result) {
+    const tracker = buildTracker(result);
+    const lastResultsDate =
+      completedResults[completedResults.length - 1]?.date ||
+      appData.meta?.resultsUpdatedAt ||
+      "pending";
+    const lastSquadDate =
+      appData.meta?.squadUpdatedAt ||
+      squadContext?.updatedAt ||
+      "pending";
+
+    modelStatus.innerHTML = `
+      <span class="status-pill">Matches tracked <strong>${tracker.total}</strong></span>
+      <span class="status-pill">Engine <strong>attack/defense</strong></span>
+      <span class="status-pill">Results <strong>${lastResultsDate}</strong></span>
+      <span class="status-pill">Squads <strong>${lastSquadDate}</strong></span>
+    `;
+  }
+
+  function renderFeaturedMatch(result) {
+    const selectedDate = controls.selectedDate.value;
+    const dailyFixtures = fixtures.filter((fixture) => fixture.date === selectedDate);
+    const featured = buildFeaturedFixture(result, dailyFixtures);
+
+    if (!featured) {
+      featuredMatch.innerHTML = `
+        <span class="featured-tag">Featured Match</span>
+        <h2 class="featured-headline">No featured fixture for this date.</h2>
+        <p class="lede">Move the date to another matchday to spotlight a fresh forecast card.</p>
+      `;
+      return;
+    }
+
+    const { fixture, forecast } = featured;
+    const isForward = forecast.teamA === fixture.teamA;
+    const teamAWin = isForward ? forecast.teamAWin : forecast.teamBWin;
+    const teamBWin = isForward ? forecast.teamBWin : forecast.teamAWin;
+    const predictedScoreA = isForward ? forecast.predictedScoreA : forecast.predictedScoreB;
+    const predictedScoreB = isForward ? forecast.predictedScoreB : forecast.predictedScoreA;
+    const ratingA = Math.round(isForward ? forecast.adjustedRatingA : forecast.adjustedRatingB);
+    const ratingB = Math.round(isForward ? forecast.adjustedRatingB : forecast.adjustedRatingA);
+
+    featuredMatch.innerHTML = `
+      <span class="featured-tag">Featured Match</span>
+      <h2 class="featured-headline">${fixture.teamA} vs ${fixture.teamB}</h2>
+      <div class="featured-meta">
+        <span>Group ${fixture.group}</span>
+        <span>${fixturesApi.formatDisplayDate(fixture.date)}</span>
+      </div>
+      <div class="featured-body">
+        <div class="featured-score">
+          <div class="featured-team">
+            <span class="flag">${fixturesApi.buildFlagLabel(fixture.teamA)}</span>
+            <strong>${fixture.teamA}</strong>
+            <small>${(teamAWin * 100).toFixed(1)}% win</small>
+            <small>Adj ${ratingA}</small>
+          </div>
+          <div class="featured-prediction">${predictedScoreA}-${predictedScoreB}</div>
+          <div class="featured-team">
+            <span class="flag">${fixturesApi.buildFlagLabel(fixture.teamB)}</span>
+            <strong>${fixture.teamB}</strong>
+            <small>${(teamBWin * 100).toFixed(1)}% win</small>
+            <small>Adj ${ratingB}</small>
+          </div>
+        </div>
+        <div class="featured-foot">
+          <span>Draw ${(forecast.draw * 100).toFixed(1)}%</span>
+          <strong>${forecast.edgeSummary}</strong>
+        </div>
+      </div>
+    `;
+  }
+
   function renderTodayFixtures(result) {
     const selectedDate = controls.selectedDate.value;
     const dailyFixtures = fixtures.filter((fixture) => fixture.date === selectedDate);
@@ -282,6 +383,8 @@ async function main() {
   }
 
   function render(result) {
+    renderModelStatus(result);
+    renderFeaturedMatch(result);
     renderTracker(result);
     renderTodayFixtures(result);
     assumptions.innerHTML = "";

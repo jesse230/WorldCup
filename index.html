@@ -6,19 +6,27 @@
     <title>World Cup 2026 Predictor</title>
     <link rel="preconnect" href="https://fonts.googleapis.com">
     <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
-    <link href="https://fonts.googleapis.com/css2?family=Barlow+Condensed:wght@400;600;700&family=Rajdhani:wght@500;600;700&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Bebas+Neue&family=IBM+Plex+Sans:wght@400;500;600;700&family=Instrument+Serif:ital@0;1&display=swap" rel="stylesheet">
     <link rel="stylesheet" href="./styles.css">
   </head>
   <body>
+    <div class="page-noise" aria-hidden="true"></div>
     <main class="shell">
-      <section class="hero">
-        <div class="hero-copy">
-          <p class="eyebrow">World Cup 2026 Predictor</p>
-          <h1>Match picks, group odds, and tournament forecasts in one match-center.</h1>
-          <p class="lede">
+      <section class="hero hero-panel">
+        <div class="hero-topline">
+          <p class="eyebrow">FIFA World Cup 2026 Forecast Desk</p>
+          <div id="model-status" class="status-rail"></div>
+        </div>
+        <div class="hero-grid">
+          <div class="hero-copy">
+            <p class="hero-kicker">Editorial Match Center</p>
+            <h1>Broadcast-grade picks, sharper scorelines, and a front page worth showing off.</h1>
+            <p class="lede">
             Forecast today’s fixtures, track how often the model gets real results right, and keep
             a running read on the whole tournament.
           </p>
+          </div>
+          <article id="featured-match" class="featured-match"></article>
         </div>
         <div class="hero-scoreboard" id="tracker-summary"></div>
       </section>
@@ -26,8 +34,8 @@
       <section class="panel tracker-panel">
         <div class="section-head">
           <div>
-            <p class="eyebrow">Prediction Tracker</p>
-            <h2>How the model is doing on completed matches</h2>
+            <p class="eyebrow">Prediction Ledger</p>
+            <h2>How the model is holding up on completed matches</h2>
           </div>
           <small id="tracker-stamp"></small>
         </div>
@@ -37,7 +45,7 @@
       <section class="panel today-panel">
         <div class="today-heading">
           <div>
-            <p class="eyebrow">Daily Matchups</p>
+            <p class="eyebrow">Daily Matchday</p>
             <h2>Fixtures for <span id="today-label"></span></h2>
           </div>
           <label class="date-picker">
@@ -48,7 +56,7 @@
         <div id="today-cards" class="today-cards"></div>
       </section>
 
-      <section class="panel controls">
+      <section class="panel controls controls-panel">
         <label>
           Simulations
           <input id="simulations" type="number" min="100" step="100" value="5000">
@@ -60,8 +68,8 @@
         <button id="run" type="button">Run Predictor</button>
       </section>
 
-      <section class="panel">
-        <h2>Model assumptions</h2>
+      <section class="panel assumptions-panel">
+        <h2>What drives the board</h2>
         <div id="assumptions" class="assumptions"></div>
       </section>
 
@@ -72,22 +80,24 @@
             <h2>Top title chances</h2>
           </div>
         </div>
-        <table id="top-table">
-          <thead>
-            <tr>
-              <th>#</th>
-              <th>Team</th>
-              <th>Group</th>
-              <th>Rating</th>
-              <th>Adj Rt</th>
-              <th>Win</th>
-              <th>Advance</th>
-              <th>Final</th>
-              <th>Semi</th>
-            </tr>
-          </thead>
-          <tbody></tbody>
-        </table>
+        <div class="table-shell">
+          <table id="top-table">
+            <thead>
+              <tr>
+                <th>#</th>
+                <th>Team</th>
+                <th>Group</th>
+                <th>Rating</th>
+                <th>Adj Rt</th>
+                <th>Win</th>
+                <th>Advance</th>
+                <th>Final</th>
+                <th>Semi</th>
+              </tr>
+            </thead>
+            <tbody></tbody>
+          </table>
+        </div>
       </section>
 
       <section class="panel">
@@ -103,7 +113,7 @@
       <section class="panel">
         <div class="section-head">
           <div>
-            <p class="eyebrow">Watch List</p>
+            <p class="eyebrow">Pressure Watch</p>
             <h2>Most balanced group matches</h2>
           </div>
         </div>
@@ -113,7 +123,7 @@
       <section class="panel">
         <div class="section-head">
           <div>
-            <p class="eyebrow">Simulation Run</p>
+            <p class="eyebrow">Tournament Tape</p>
             <h2>Sample tournament path</h2>
           </div>
         </div>
