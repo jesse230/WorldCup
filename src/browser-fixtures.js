@@ -50,34 +50,52 @@
     Panama: "pa"
   };
 
-  function toFlagEmoji(countryCode) {
-    if (!countryCode || countryCode.includes("-")) {
+  const SPECIAL_FLAG_SVGS = {
+    "gb-eng": `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 36">
+        <rect width="60" height="36" fill="#ffffff"/>
+        <rect x="24" width="12" height="36" fill="#ce1126"/>
+        <rect y="12" width="60" height="12" fill="#ce1126"/>
+      </svg>
+    `,
+    "gb-sct": `
+      <svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 60 36">
+        <rect width="60" height="36" fill="#005eb8"/>
+        <path d="M0 0 L26 0 L60 20.5 L60 36 L34 36 L0 15.5 Z" fill="#ffffff"/>
+        <path d="M60 0 L34 0 L0 20.5 L0 36 L26 36 L60 15.5 Z" fill="#ffffff"/>
+      </svg>
+    `
+  };
+
+  function encodeSvg(svg) {
+    return `data:image/svg+xml;utf8,${encodeURIComponent(svg.trim())}`;
+  }
+
+  function flagImageUrl(code) {
+    if (!code) {
       return null;
     }
 
-    return countryCode
-      .toUpperCase()
-      .split("")
-      .map((char) => String.fromCodePoint(127397 + char.charCodeAt(0)))
-      .join("");
+    if (SPECIAL_FLAG_SVGS[code]) {
+      return encodeSvg(SPECIAL_FLAG_SVGS[code]);
+    }
+
+    if (code.includes("-")) {
+      return null;
+    }
+
+    return `https://flagcdn.com/w80/${code}.png`;
   }
 
   function buildFlagLabel(teamName) {
     const code = TEAM_FLAG_CODES[teamName];
-    if (!code) {
-      return "🏳";
+    const imageUrl = flagImageUrl(code);
+
+    if (!imageUrl) {
+      return `<span class="flag flag-fallback">${teamName.slice(0, 2).toUpperCase()}</span>`;
     }
 
-    const emoji = toFlagEmoji(code);
-    if (emoji) {
-      return emoji;
-    }
-
-    if (code === "gb-eng" || code === "gb-sct") {
-      return "🏴";
-    }
-
-    return "🏳";
+    return `<span class="flag"><img class="flag-image" src="${imageUrl}" alt="${teamName} flag" loading="lazy" decoding="async"></span>`;
   }
 
   function groupMapFromTeams(teams) {

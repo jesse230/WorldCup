@@ -205,7 +205,7 @@ async function main() {
             </div>
             <div class="tracker-match">
               <div class="tracker-teams">
-                <span class="flag">${fixturesApi.buildFlagLabel(row.teamA)}</span>
+                ${fixturesApi.buildFlagLabel(row.teamA)}
                 <span>${row.teamA}</span>
                 <strong>${row.scoreA}</strong>
               </div>
@@ -213,7 +213,7 @@ async function main() {
               <div class="tracker-teams">
                 <strong>${row.scoreB}</strong>
                 <span>${row.teamB}</span>
-                <span class="flag">${fixturesApi.buildFlagLabel(row.teamB)}</span>
+                ${fixturesApi.buildFlagLabel(row.teamB)}
               </div>
             </div>
             <div class="tracker-bottomline">
@@ -305,14 +305,14 @@ async function main() {
       <div class="featured-body">
         <div class="featured-score">
           <div class="featured-team">
-            <span class="flag">${fixturesApi.buildFlagLabel(fixture.teamA)}</span>
+            ${fixturesApi.buildFlagLabel(fixture.teamA)}
             <strong>${fixture.teamA}</strong>
             <small>${(teamAWin * 100).toFixed(1)}% win</small>
             <small>Adj ${ratingA}</small>
           </div>
           <div class="featured-prediction">${predictedScoreA}-${predictedScoreB}</div>
           <div class="featured-team">
-            <span class="flag">${fixturesApi.buildFlagLabel(fixture.teamB)}</span>
+            ${fixturesApi.buildFlagLabel(fixture.teamB)}
             <strong>${fixture.teamB}</strong>
             <small>${(teamBWin * 100).toFixed(1)}% win</small>
             <small>Adj ${ratingB}</small>
@@ -354,14 +354,14 @@ async function main() {
                 </div>
                 <div class="today-teams">
                   <div class="today-team">
-                    <span class="flag">${fixturesApi.buildFlagLabel(fixture.teamA)}</span>
+                    ${fixturesApi.buildFlagLabel(fixture.teamA)}
                     <strong>${fixture.teamA}</strong>
                     <small>${(teamAWin * 100).toFixed(1)}% win</small>
                     <small class="context-line">Adj ${isForward ? forecast.adjustedRatingA : forecast.adjustedRatingB}</small>
                   </div>
                   <div class="today-vs">vs</div>
                   <div class="today-team">
-                    <span class="flag">${fixturesApi.buildFlagLabel(fixture.teamB)}</span>
+                    ${fixturesApi.buildFlagLabel(fixture.teamB)}
                     <strong>${fixture.teamB}</strong>
                     <small>${(teamBWin * 100).toFixed(1)}% win</small>
                     <small class="context-line">Adj ${isForward ? forecast.adjustedRatingB : forecast.adjustedRatingA}</small>
