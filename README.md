@@ -125,6 +125,8 @@ If Supabase env vars are missing, the app still works locally by falling back to
     "name": "Argentina",
     "group": "J",
     "rating": 2140,
+    "attackRating": 2165,
+    "defenseRating": 2115,
     "confederation": "CONMEBOL",
     "host": false,
     "adjustments": {
@@ -144,6 +146,7 @@ Adjustment notes:
 - Negative numbers hurt the team.
 - `injuries` should usually be negative when key players are missing.
 - The model now shows `Adj Rt` as base rating plus these modifiers.
+- `attackRating` and `defenseRating` are optional. If omitted, the model derives both from `rating` plus context.
 
 ## Semi-Auto Squad Context
 

@@ -5,6 +5,11 @@ const HOST_GROUPS = {
   "United States": "C"
 };
 const MAX_GOAL_BUCKET = 7;
+const HOST_ATTACK_BONUS = 24;
+const HOST_DEFENSE_BONUS = 18;
+const BASE_HOME_GOALS = 1.3;
+const BASE_AWAY_GOALS = 1.08;
+const GOAL_RATING_DIVISOR = 575;
 const CONTEXT_LABELS = {
   form: "form",
   squad: "squad",
@@ -224,8 +229,47 @@ function contextTotal(team) {
   return adjustments.form + adjustments.squad + adjustments.injuries + adjustments.fatigue + adjustments.chemistry;
 }
 
+function explicitRating(value) {
+  const parsed = Number(value);
+  return Number.isFinite(parsed) ? parsed : null;
+}
+
+function derivedAttackRating(team) {
+  const explicit = explicitRating(team.attackRating);
+  if (explicit !== null) {
+    return explicit;
+  }
+
+  const adjustments = getContextAdjustments(team);
+  return (
+    team.rating +
+    adjustments.form * 0.7 +
+    adjustments.squad * 0.45 +
+    adjustments.chemistry * 0.4 +
+    adjustments.injuries * 0.15 +
+    adjustments.fatigue * 0.1
+  );
+}
+
+function derivedDefenseRating(team) {
+  const explicit = explicitRating(team.defenseRating);
+  if (explicit !== null) {
+    return explicit;
+  }
+
+  const adjustments = getContextAdjustments(team);
+  return (
+    team.rating +
+    adjustments.form * 0.3 +
+    adjustments.squad * 0.35 +
+    adjustments.chemistry * 0.45 +
+    adjustments.injuries * 0.7 +
+    adjustments.fatigue * 0.35
+  );
+}
+
 function effectiveRating(team) {
-  return team.rating + contextTotal(team);
+  return (derivedAttackRating(team) + derivedDefenseRating(team)) / 2;
 }
 
 function describeContext(team) {
@@ -236,21 +280,31 @@ function describeContext(team) {
     .map(([key, value]) => `${value > 0 ? "+" : ""}${value} ${CONTEXT_LABELS[key]}`);
 
   if (team.host) {
-    entries.unshift("+45 host");
+    entries.unshift(`+${HOST_ATTACK_BONUS}/${HOST_DEFENSE_BONUS} host attack/defense`);
   }
 
   return entries.length ? entries : ["no extra modifiers"];
 }
 
 function teamStrength(team) {
-  return effectiveRating(team) + (team.host ? 45 : 0);
+  return (attackStrength(team) + defenseStrength(team)) / 2;
+}
+
+function attackStrength(team) {
+  return derivedAttackRating(team) + (team.host ? HOST_ATTACK_BONUS : 0);
+}
+
+function defenseStrength(team) {
+  return derivedDefenseRating(team) + (team.host ? HOST_DEFENSE_BONUS : 0);
 }
 
 function enrichTeams(teams) {
   return teams.map((team) => ({
     ...team,
     context: getContextAdjustments(team),
-    adjustedRating: effectiveRating(team)
+    adjustedRating: effectiveRating(team),
+    adjustedAttackRating: attackStrength(team),
+    adjustedDefenseRating: defenseStrength(team)
   }));
 }
 
@@ -260,14 +314,16 @@ function expectedResult(teamA, teamB) {
 }
 
 function goalExpectancy(teamA, teamB) {
+  const attackVsDefenseA = (attackStrength(teamA) - defenseStrength(teamB)) / GOAL_RATING_DIVISOR;
+  const attackVsDefenseB = (attackStrength(teamB) - defenseStrength(teamA)) / GOAL_RATING_DIVISOR;
   const expectation = expectedResult(teamA, teamB);
-  const imbalance = Math.abs(expectation - 0.5) * 2;
-  const totalGoals = 2.35 + imbalance * 0.55;
-  const homeShare = 0.5 + (expectation - 0.5) * 0.92;
+  const paceAdjustment = 1 + Math.abs(expectation - 0.5) * 0.14;
+  const home = BASE_HOME_GOALS * Math.exp(attackVsDefenseA) * paceAdjustment;
+  const away = BASE_AWAY_GOALS * Math.exp(attackVsDefenseB) * paceAdjustment;
 
   return {
-    home: clamp(totalGoals * homeShare, 0.25, 3.6),
-    away: clamp(totalGoals * (1 - homeShare), 0.2, 3.1)
+    home: clamp(home, 0.2, 3.9),
+    away: clamp(away, 0.15, 3.4)
   };
 }
 
@@ -327,6 +383,10 @@ function buildMatchForecast(teamA, teamB, knockout = false) {
     xgB: xg.away,
     adjustedRatingA: effectiveRating(teamA),
     adjustedRatingB: effectiveRating(teamB),
+    attackRatingA: attackStrength(teamA),
+    attackRatingB: attackStrength(teamB),
+    defenseRatingA: defenseStrength(teamA),
+    defenseRatingB: defenseStrength(teamB),
     contextA: describeContext(teamA),
     contextB: describeContext(teamB),
     edgeSummary:
@@ -623,6 +683,8 @@ function groupProjectionRows(normalizedTeams, summary, simulationCount) {
         team: team.name,
         rating: team.rating,
         adjustedRating: effectiveRating(team),
+        adjustedAttackRating: attackStrength(team),
+        adjustedDefenseRating: defenseStrength(team),
         context: describeContext(team),
         groupWin: record.groupWin / simulationCount,
         top2: (record.finish1 + record.finish2) / simulationCount,
@@ -700,6 +762,8 @@ function runSimulations(teams, simulationCount = 2000, seed = 20260611) {
         group: team.group,
         rating: team.rating,
         adjustedRating: effectiveRating(team),
+        adjustedAttackRating: attackStrength(team),
+        adjustedDefenseRating: defenseStrength(team),
         context: describeContext(team),
         finish1: record.finish1 / simulationCount,
         finish2: record.finish2 / simulationCount,
@@ -726,7 +790,7 @@ function runSimulations(teams, simulationCount = 2000, seed = 20260611) {
         ? "Using provided group assignments"
         : "Using a provisional auto-draw from ratings, hosts, and confederation limits",
       knockoutSeeding: "Approximate round-of-32 seeding that favors group winners and avoids same-group pairings where possible",
-      matchModel: "Strength-adjusted Poisson scoring with analytical win/draw/loss estimates and host boost"
+      matchModel: "Attack-vs-defense Poisson scoring with analytical win/draw/loss estimates, context modifiers, and split host boost"
     },
     probabilities,
     groupProjections: groupProjectionRows(normalizedTeams, summary, simulationCount),
