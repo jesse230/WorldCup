@@ -8,16 +8,18 @@ async function loadAppData() {
     return response.json();
   } catch (error) {
     console.warn("Falling back to static data files.", error);
-    const [teamsResponse, resultsResponse, squadContextResponse] = await Promise.all([
+    const [teamsResponse, resultsResponse, squadContextResponse, historicalResponse] = await Promise.all([
       fetch("./data/teams-2026-qualified.json"),
       fetch("./data/results-2026.json"),
-      fetch("./data/squad-context.json")
+      fetch("./data/squad-context.json"),
+      fetch("./data/historical-results.json").catch(() => null)
     ]);
 
     return {
       teams: await teamsResponse.json(),
       results: await resultsResponse.json(),
       squadContext: await squadContextResponse.json(),
+      historicalResults: historicalResponse && historicalResponse.ok ? await historicalResponse.json() : [],
       meta: {
         mode: "static-fallback"
       }
@@ -30,6 +32,8 @@ async function main() {
   const teams = appData.teams;
   const completedResults = appData.results;
   const squadContext = appData.squadContext;
+  const historicalResults = appData.historicalResults || [];
+  const derivedContextApi = window.WorldCupDerivedContext;
 
   const controls = {
     simulations: document.querySelector("#simulations"),
@@ -78,7 +82,18 @@ async function main() {
     });
   }
 
-  const teamsWithContext = mergeTeamContext(teams);
+  function enrichWithDerivedContext(teamList, asOfIso) {
+    if (!derivedContextApi) return teamList;
+    return derivedContextApi.applyDerivedContext(teamList, {
+      results: completedResults,
+      fixtures,
+      historicalResults,
+      asOfIso
+    });
+  }
+
+  const baseTeamsWithContext = mergeTeamContext(teams);
+  let teamsWithContext = enrichWithDerivedContext(baseTeamsWithContext, null);
 
   function getTodayIsoDate() {
     const now = new Date();
@@ -497,6 +512,7 @@ async function main() {
   }
 
   function run() {
+    teamsWithContext = enrichWithDerivedContext(baseTeamsWithContext, controls.selectedDate.value);
     const result = model.runSimulations(
       teamsWithContext,
       Number(controls.simulations.value || 5000),

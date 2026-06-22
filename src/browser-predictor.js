@@ -16,6 +16,8 @@
       fatigue: "fatigue",
       chemistry: "chemistry"
     };
+    const REST_ADJUSTMENT_CLAMP = 12;
+    const H2H_BIAS_CLAMP = 22;
 
     function createRng(seed = Date.now()) {
       let value = Math.floor(seed) % 2147483647;
@@ -232,7 +234,21 @@
       return team.rating + contextTotal(team);
     }
 
-    function describeContext(team) {
+    function restAdjustmentValue(team) {
+      const value = Number(team && team.restAdjustment || 0);
+      if (!Number.isFinite(value)) return 0;
+      return Math.max(-REST_ADJUSTMENT_CLAMP, Math.min(REST_ADJUSTMENT_CLAMP, value));
+    }
+
+    function h2hBiasFor(team, opponentName) {
+      const map = team && team.h2hVs;
+      if (!map || !opponentName) return 0;
+      const value = Number(map[opponentName] || 0);
+      if (!Number.isFinite(value)) return 0;
+      return Math.max(-H2H_BIAS_CLAMP, Math.min(H2H_BIAS_CLAMP, value));
+    }
+
+    function describeContext(team, opponentName) {
       const adjustments = getContextAdjustments(team);
       const entries = Object.entries(adjustments)
         .filter(([, value]) => value !== 0)
@@ -243,11 +259,23 @@
         entries.unshift("+45 host");
       }
 
+      const rest = restAdjustmentValue(team);
+      if (rest !== 0) {
+        entries.push(`${rest > 0 ? "+" : ""}${rest} rest`);
+      }
+
+      if (opponentName) {
+        const h2h = h2hBiasFor(team, opponentName);
+        if (h2h !== 0) {
+          entries.push(`${h2h > 0 ? "+" : ""}${h2h} h2h vs ${opponentName}`);
+        }
+      }
+
       return entries.length ? entries : ["no extra modifiers"];
     }
 
     function teamStrength(team) {
-      return effectiveRating(team) + (team.host ? 45 : 0);
+      return effectiveRating(team) + (team.host ? 45 : 0) + restAdjustmentValue(team);
     }
 
     function enrichTeams(teams) {
@@ -259,7 +287,8 @@
     }
 
     function expectedResult(teamA, teamB) {
-      const delta = teamStrength(teamA) - teamStrength(teamB);
+      const h2hDelta = h2hBiasFor(teamA, teamB.name) - h2hBiasFor(teamB, teamA.name);
+      const delta = teamStrength(teamA) - teamStrength(teamB) + h2hDelta;
       return 1 / (1 + Math.pow(10, -delta / 400));
     }
 
@@ -321,8 +350,9 @@
       const penaltiesEdge = expectedResult(teamA, teamB);
       const ratingGap = teamStrength(teamA) - teamStrength(teamB);
       const edgeTeam = ratingGap >= 0 ? teamA : teamB;
+      const edgeOpponent = ratingGap >= 0 ? teamB : teamA;
       const edgeAmount = Math.abs(ratingGap);
-      const edgeReasons = describeContext(edgeTeam);
+      const edgeReasons = describeContext(edgeTeam, edgeOpponent.name);
 
       return {
         teamA: teamA.name,
@@ -331,8 +361,8 @@
         xgB: xg.away,
         adjustedRatingA: effectiveRating(teamA),
         adjustedRatingB: effectiveRating(teamB),
-        contextA: describeContext(teamA),
-        contextB: describeContext(teamB),
+        contextA: describeContext(teamA, teamB.name),
+        contextB: describeContext(teamB, teamA.name),
         edgeSummary:
           edgeAmount < 25
             ? "Near-even matchup after team context adjustments"
