@@ -185,11 +185,154 @@
     });
   }
 
+  const ELO_K = 20;
+  const ELO_MAX_NUDGE = 25;
+  const ELO_MIN_RESULTS_FOR_TUNE = 12;
+
+  function eloExpected(ratingA, ratingB) {
+    return 1 / (1 + Math.pow(10, -(ratingA - ratingB) / 400));
+  }
+
+  function actualScoreFor(goalsFor, goalsAgainst) {
+    if (goalsFor > goalsAgainst) return 1;
+    if (goalsFor < goalsAgainst) return 0;
+    return 0.5;
+  }
+
+  function movMultiplier(goalDiffAbs, ratingGap) {
+    const goalTerm = Math.log(goalDiffAbs + 1);
+    const damp = 2.2 / (0.001 * Math.abs(ratingGap) + 2.2);
+    return Math.max(1, goalTerm * damp);
+  }
+
+  function applyResultUpdates(teams, results) {
+    if (!Array.isArray(results) || results.length === 0) return teams.map((team) => Object.assign({}, team));
+
+    const ratings = new Map(teams.map((team) => [team.name, Number(team.rating) || 0]));
+    const baseRatings = new Map(ratings);
+
+    const ordered = results
+      .filter((row) => row && row.date && Number.isFinite(Number(row.scoreA)) && Number.isFinite(Number(row.scoreB)))
+      .slice()
+      .sort((a, b) => a.date.localeCompare(b.date));
+
+    for (const match of ordered) {
+      const ratingA = ratings.get(match.teamA);
+      const ratingB = ratings.get(match.teamB);
+      if (ratingA === undefined || ratingB === undefined) continue;
+
+      const scoreA = Number(match.scoreA);
+      const scoreB = Number(match.scoreB);
+      const expectedA = eloExpected(ratingA, ratingB);
+      const actualA = actualScoreFor(scoreA, scoreB);
+      const mov = movMultiplier(Math.abs(scoreA - scoreB), ratingA - ratingB);
+      const rawDelta = ELO_K * mov * (actualA - expectedA);
+      const delta = clamp(rawDelta, -ELO_MAX_NUDGE, ELO_MAX_NUDGE);
+
+      ratings.set(match.teamA, ratingA + delta);
+      ratings.set(match.teamB, ratingB - delta);
+    }
+
+    return teams.map((team) => {
+      const updated = ratings.get(team.name);
+      if (updated === undefined) return Object.assign({}, team);
+      const base = baseRatings.get(team.name);
+      return Object.assign({}, team, {
+        rating: Math.round(updated),
+        baseRating: base,
+        ratingDelta: Math.round(updated - base)
+      });
+    });
+  }
+
+  function logScoreForResult(probs, scoreA, scoreB) {
+    const homeIdx = Math.min(scoreA, probs.homeBuckets.length - 1);
+    const awayIdx = Math.min(scoreB, probs.awayBuckets.length - 1);
+    const p = probs.homeBuckets[homeIdx] * probs.awayBuckets[awayIdx];
+    if (!Number.isFinite(p) || p <= 0) return -20;
+    return Math.log(p);
+  }
+
+  function totalLogLikelihood(teams, results, calibration, computeMatchProbabilities) {
+    const teamMap = new Map(teams.map((team) => [team.name, team]));
+    let total = 0;
+    for (const match of results) {
+      const teamA = teamMap.get(match.teamA);
+      const teamB = teamMap.get(match.teamB);
+      if (!teamA || !teamB) continue;
+      const scoreA = Number(match.scoreA);
+      const scoreB = Number(match.scoreB);
+      if (!Number.isFinite(scoreA) || !Number.isFinite(scoreB)) continue;
+      const probs = computeMatchProbabilities(teamA, teamB, calibration);
+      total += logScoreForResult(probs, scoreA, scoreB);
+    }
+    return total;
+  }
+
+  function calibrateAgainstResults(teams, results, model) {
+    const defaults = (model && model.CALIBRATION_DEFAULTS) || {
+      goalRatingDivisor: 575,
+      hostBonusScale: 1,
+      baseGoalsScale: 1
+    };
+    const computeMatchProbabilities = model && model.computeMatchProbabilities;
+
+    if (!Array.isArray(results) || results.length < ELO_MIN_RESULTS_FOR_TUNE || !computeMatchProbabilities) {
+      return {
+        calibration: Object.assign({}, defaults),
+        tuned: false,
+        sampleSize: Array.isArray(results) ? results.length : 0,
+        reason: !computeMatchProbabilities
+          ? "predictor missing computeMatchProbabilities export"
+          : "need >=" + ELO_MIN_RESULTS_FOR_TUNE + " results, have " + ((results || []).length)
+      };
+    }
+
+    const stepMultipliers = [0.9, 0.95, 1, 1.05, 1.1];
+    const paramKeys = ["goalRatingDivisor", "hostBonusScale", "baseGoalsScale"];
+    let current = Object.assign({}, defaults);
+    let bestScore = totalLogLikelihood(teams, results, current, computeMatchProbabilities);
+
+    for (let pass = 0; pass < 3; pass += 1) {
+      let improved = false;
+      for (const key of paramKeys) {
+        let bestForKey = current[key];
+        let bestScoreForKey = bestScore;
+        for (const mult of stepMultipliers) {
+          const candidateValue = defaults[key] * mult;
+          const candidate = Object.assign({}, current);
+          candidate[key] = candidateValue;
+          const score = totalLogLikelihood(teams, results, candidate, computeMatchProbabilities);
+          if (score > bestScoreForKey) {
+            bestScoreForKey = score;
+            bestForKey = candidateValue;
+          }
+        }
+        if (bestForKey !== current[key]) {
+          current = Object.assign({}, current);
+          current[key] = bestForKey;
+          bestScore = bestScoreForKey;
+          improved = true;
+        }
+      }
+      if (!improved) break;
+    }
+
+    return {
+      calibration: current,
+      tuned: true,
+      sampleSize: results.length,
+      logLikelihood: bestScore
+    };
+  }
+
   globalScope.WorldCupDerivedContext = {
     deriveFormAdjustment,
     computeRestAdjustment,
     computeH2HBias,
     buildH2HMap,
-    applyDerivedContext
+    applyDerivedContext,
+    applyResultUpdates,
+    calibrateAgainstResults
   };
 })(window);

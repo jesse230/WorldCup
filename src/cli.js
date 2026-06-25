@@ -3,17 +3,18 @@ const path = require("path");
 const { runSimulations } = require("./predictor");
 const { loadTeamsWithContext } = require("./context-loader");
 
-function loadTeams(filePath) {
+function loadBundle(filePath) {
   const fullPath = path.resolve(process.cwd(), filePath || "data/teams-2026-qualified.json");
   const squadContextPath = path.resolve(process.cwd(), "data/squad-context.json");
-  return loadTeamsWithContext(fullPath, squadContextPath).teams;
+  return loadTeamsWithContext(fullPath, squadContextPath);
 }
 
 const simulationCount = Number(process.argv[2] || 5000);
 const seed = Number(process.argv[3] || 20260611);
 const inputPath = process.argv[4] || "data/teams-2026-qualified.json";
-const teams = loadTeams(inputPath);
-const result = runSimulations(teams, simulationCount, seed);
+const bundle = loadBundle(inputPath);
+const teams = bundle.teams;
+const result = runSimulations(teams, simulationCount, seed, bundle.calibration);
 
 console.log(`Simulations: ${simulationCount}`);
 console.log(`Seed: ${seed}`);

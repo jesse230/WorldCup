@@ -20,6 +20,23 @@ const CONTEXT_LABELS = {
 const REST_ADJUSTMENT_CLAMP = 12;
 const H2H_BIAS_CLAMP = 22;
 
+const CALIBRATION_DEFAULTS = Object.freeze({
+  goalRatingDivisor: GOAL_RATING_DIVISOR,
+  hostBonusScale: 1,
+  baseGoalsScale: 1
+});
+
+let activeCalibration = { ...CALIBRATION_DEFAULTS };
+
+function resolveCalibration(overrides) {
+  if (!overrides) return { ...CALIBRATION_DEFAULTS };
+  return {
+    goalRatingDivisor: Number.isFinite(overrides.goalRatingDivisor) ? overrides.goalRatingDivisor : CALIBRATION_DEFAULTS.goalRatingDivisor,
+    hostBonusScale: Number.isFinite(overrides.hostBonusScale) ? overrides.hostBonusScale : CALIBRATION_DEFAULTS.hostBonusScale,
+    baseGoalsScale: Number.isFinite(overrides.baseGoalsScale) ? overrides.baseGoalsScale : CALIBRATION_DEFAULTS.baseGoalsScale
+  };
+}
+
 function createRng(seed = Date.now()) {
   let value = Math.floor(seed) % 2147483647;
   if (value <= 0) {
@@ -319,11 +336,13 @@ function teamStrength(team) {
 }
 
 function attackStrength(team) {
-  return derivedAttackRating(team) + (team.host ? HOST_ATTACK_BONUS : 0) + restAdjustmentValue(team);
+  const hostBonus = team.host ? HOST_ATTACK_BONUS * activeCalibration.hostBonusScale : 0;
+  return derivedAttackRating(team) + hostBonus + restAdjustmentValue(team);
 }
 
 function defenseStrength(team) {
-  return derivedDefenseRating(team) + (team.host ? HOST_DEFENSE_BONUS : 0) + restAdjustmentValue(team);
+  const hostBonus = team.host ? HOST_DEFENSE_BONUS * activeCalibration.hostBonusScale : 0;
+  return derivedDefenseRating(team) + hostBonus + restAdjustmentValue(team);
 }
 
 function enrichTeams(teams) {
@@ -343,17 +362,32 @@ function expectedResult(teamA, teamB) {
 }
 
 function goalExpectancy(teamA, teamB) {
-  const attackVsDefenseA = (attackStrength(teamA) - defenseStrength(teamB)) / GOAL_RATING_DIVISOR;
-  const attackVsDefenseB = (attackStrength(teamB) - defenseStrength(teamA)) / GOAL_RATING_DIVISOR;
+  const divisor = activeCalibration.goalRatingDivisor;
+  const goalsScale = activeCalibration.baseGoalsScale;
+  const attackVsDefenseA = (attackStrength(teamA) - defenseStrength(teamB)) / divisor;
+  const attackVsDefenseB = (attackStrength(teamB) - defenseStrength(teamA)) / divisor;
   const expectation = expectedResult(teamA, teamB);
   const paceAdjustment = 1 + Math.abs(expectation - 0.5) * 0.14;
-  const home = BASE_HOME_GOALS * Math.exp(attackVsDefenseA) * paceAdjustment;
-  const away = BASE_AWAY_GOALS * Math.exp(attackVsDefenseB) * paceAdjustment;
+  const home = BASE_HOME_GOALS * goalsScale * Math.exp(attackVsDefenseA) * paceAdjustment;
+  const away = BASE_AWAY_GOALS * goalsScale * Math.exp(attackVsDefenseB) * paceAdjustment;
 
   return {
     home: clamp(home, 0.2, 3.9),
     away: clamp(away, 0.15, 3.4)
   };
+}
+
+function computeMatchProbabilities(teamA, teamB, calibration) {
+  const previous = activeCalibration;
+  activeCalibration = resolveCalibration(calibration);
+  try {
+    const xg = goalExpectancy(teamA, teamB);
+    const homeBuckets = poissonBuckets(xg.home);
+    const awayBuckets = poissonBuckets(xg.away);
+    return { xg, homeBuckets, awayBuckets };
+  } finally {
+    activeCalibration = previous;
+  }
 }
 
 function poissonBuckets(lambda, maxBucket = MAX_GOAL_BUCKET) {
@@ -730,8 +764,11 @@ function groupProjectionRows(normalizedTeams, summary, simulationCount) {
   });
 }
 
-function runSimulations(teams, simulationCount = 2000, seed = 20260611) {
+function runSimulations(teams, simulationCount = 2000, seed = 20260611, calibration) {
   validateTeams(teams);
+  const previousCalibration = activeCalibration;
+  activeCalibration = resolveCalibration(calibration);
+  try {
   const normalizedTeams = enrichTeams(normalizeTeams(teams));
   const rng = createRng(seed);
   const summary = new Map(normalizedTeams.map((team) => [team.name, blankRecord()]));
@@ -813,6 +850,8 @@ function runSimulations(teams, simulationCount = 2000, seed = 20260611) {
     })
     .sort((a, b) => b.winTournament - a.winTournament || b.reachFinal - a.reachFinal);
 
+  const calibrationSummary = describeCalibration(activeCalibration);
+
   return {
     assumptions: {
       format: "48 teams, 12 groups of 4, top 2 plus best 8 third-placed teams",
@@ -820,16 +859,34 @@ function runSimulations(teams, simulationCount = 2000, seed = 20260611) {
         ? "Using provided group assignments"
         : "Using a provisional auto-draw from ratings, hosts, and confederation limits",
       knockoutSeeding: "Approximate round-of-32 seeding that favors group winners and avoids same-group pairings where possible",
-      matchModel: "Attack-vs-defense Poisson scoring with analytical win/draw/loss estimates, context modifiers, and split host boost"
+      matchModel: "Attack-vs-defense Poisson scoring with analytical win/draw/loss estimates, context modifiers, and split host boost",
+      calibration: calibrationSummary
     },
+    calibration: { ...activeCalibration },
     probabilities,
     groupProjections: groupProjectionRows(normalizedTeams, summary, simulationCount),
     groupMatchForecasts: buildGroupMatchForecasts(normalizedTeams),
     latestTournament
   };
+  } finally {
+    activeCalibration = previousCalibration;
+  }
+}
+
+function describeCalibration(calibration) {
+  const isDefault =
+    calibration.goalRatingDivisor === CALIBRATION_DEFAULTS.goalRatingDivisor &&
+    calibration.hostBonusScale === CALIBRATION_DEFAULTS.hostBonusScale &&
+    calibration.baseGoalsScale === CALIBRATION_DEFAULTS.baseGoalsScale;
+  if (isDefault) {
+    return "Default weights (no tournament results yet to tune against)";
+  }
+  return `Tuned: divisor ${calibration.goalRatingDivisor.toFixed(0)}, host×${calibration.hostBonusScale.toFixed(2)}, goals×${calibration.baseGoalsScale.toFixed(2)}`;
 }
 
 module.exports = {
   GROUP_ORDER,
-  runSimulations
+  runSimulations,
+  computeMatchProbabilities,
+  CALIBRATION_DEFAULTS
 };

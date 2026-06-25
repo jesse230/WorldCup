@@ -1,7 +1,8 @@
 const fs = require("fs");
 const path = require("path");
-const { applyDerivedContext } = require("./derived-context");
+const { applyDerivedContext, applyResultUpdates, calibrateAgainstResults } = require("./derived-context");
 const { buildGroupStageFixtures } = require("./fixtures");
+const predictorModel = require("./predictor");
 
 function loadJsonIfExists(filePath, fallback) {
   if (!fs.existsSync(filePath)) {
@@ -56,19 +57,28 @@ function loadTeamsWithContext(teamFilePath, squadContextPath, options) {
   const fixtures = buildGroupStageFixtures(merged);
   const asOfIso = options?.asOfIso || latestDateFromResults(results) || fixtures[0]?.date || null;
 
-  const enriched = applyDerivedContext(merged, {
+  const ratingUpdated = applyResultUpdates(merged, results);
+  const enriched = applyDerivedContext(ratingUpdated, {
     results,
     fixtures,
     historicalResults,
     asOfIso
   });
+  const calibrationResult = calibrateAgainstResults(enriched, results, predictorModel);
 
   return {
     teams: enriched,
     squadContext,
     results,
     historicalResults,
-    asOfIso
+    asOfIso,
+    calibration: calibrationResult.calibration,
+    calibrationMeta: {
+      tuned: calibrationResult.tuned,
+      sampleSize: calibrationResult.sampleSize,
+      reason: calibrationResult.reason,
+      logLikelihood: calibrationResult.logLikelihood
+    }
   };
 }
 

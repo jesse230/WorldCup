@@ -18,6 +18,26 @@
     };
     const REST_ADJUSTMENT_CLAMP = 12;
     const H2H_BIAS_CLAMP = 22;
+    const HOST_BONUS_DEFAULT = 45;
+    const BASE_TOTAL_GOALS_DEFAULT = 2.35;
+    const GOAL_RATING_DIVISOR_DEFAULT = 575;
+
+    const CALIBRATION_DEFAULTS = Object.freeze({
+      goalRatingDivisor: GOAL_RATING_DIVISOR_DEFAULT,
+      hostBonusScale: 1,
+      baseGoalsScale: 1
+    });
+
+    let activeCalibration = Object.assign({}, CALIBRATION_DEFAULTS);
+
+    function resolveCalibration(overrides) {
+      if (!overrides) return Object.assign({}, CALIBRATION_DEFAULTS);
+      return {
+        goalRatingDivisor: Number.isFinite(overrides.goalRatingDivisor) ? overrides.goalRatingDivisor : CALIBRATION_DEFAULTS.goalRatingDivisor,
+        hostBonusScale: Number.isFinite(overrides.hostBonusScale) ? overrides.hostBonusScale : CALIBRATION_DEFAULTS.hostBonusScale,
+        baseGoalsScale: Number.isFinite(overrides.baseGoalsScale) ? overrides.baseGoalsScale : CALIBRATION_DEFAULTS.baseGoalsScale
+      };
+    }
 
     function createRng(seed = Date.now()) {
       let value = Math.floor(seed) % 2147483647;
@@ -275,7 +295,8 @@
     }
 
     function teamStrength(team) {
-      return effectiveRating(team) + (team.host ? 45 : 0) + restAdjustmentValue(team);
+      const hostBonus = team.host ? HOST_BONUS_DEFAULT * activeCalibration.hostBonusScale : 0;
+      return effectiveRating(team) + hostBonus + restAdjustmentValue(team);
     }
 
     function enrichTeams(teams) {
@@ -295,13 +316,27 @@
     function goalExpectancy(teamA, teamB) {
       const expectation = expectedResult(teamA, teamB);
       const imbalance = Math.abs(expectation - 0.5) * 2;
-      const totalGoals = 2.35 + imbalance * 0.55;
-      const homeShare = 0.5 + (expectation - 0.5) * 0.92;
+      const totalGoals = (BASE_TOTAL_GOALS_DEFAULT + imbalance * 0.55) * activeCalibration.baseGoalsScale;
+      const ratingSpreadFactor = GOAL_RATING_DIVISOR_DEFAULT / activeCalibration.goalRatingDivisor;
+      const homeShare = 0.5 + (expectation - 0.5) * 0.92 * ratingSpreadFactor;
 
       return {
         home: clamp(totalGoals * homeShare, 0.25, 3.6),
         away: clamp(totalGoals * (1 - homeShare), 0.2, 3.1)
       };
+    }
+
+    function computeMatchProbabilities(teamA, teamB, calibration) {
+      const previous = activeCalibration;
+      activeCalibration = resolveCalibration(calibration);
+      try {
+        const xg = goalExpectancy(teamA, teamB);
+        const homeBuckets = poissonBuckets(xg.home);
+        const awayBuckets = poissonBuckets(xg.away);
+        return { xg: xg, homeBuckets: homeBuckets, awayBuckets: awayBuckets };
+      } finally {
+        activeCalibration = previous;
+      }
     }
 
     function poissonBuckets(lambda, maxBucket = MAX_GOAL_BUCKET) {
@@ -667,8 +702,11 @@
       });
     }
 
-    function runSimulations(teams, simulationCount = 2000, seed = 20260611) {
+    function runSimulations(teams, simulationCount = 2000, seed = 20260611, calibration) {
       validateTeams(teams);
+      const previousCalibration = activeCalibration;
+      activeCalibration = resolveCalibration(calibration);
+      try {
       const normalizedTeams = enrichTeams(normalizeTeams(teams));
       const rng = createRng(seed);
       const summary = new Map(normalizedTeams.map((team) => [team.name, blankRecord()]));
@@ -748,6 +786,8 @@
         })
         .sort((a, b) => b.winTournament - a.winTournament || b.reachFinal - a.reachFinal);
 
+      const calibrationSummary = describeCalibration(activeCalibration);
+
       return {
         assumptions: {
           format: "48 teams, 12 groups of 4, top 2 plus best 8 third-placed teams",
@@ -755,18 +795,36 @@
             ? "Using provided group assignments"
             : "Using a provisional auto-draw from ratings, hosts, and confederation limits",
           knockoutSeeding: "Approximate round-of-32 seeding that favors group winners and avoids same-group pairings where possible",
-          matchModel: "Strength-adjusted Poisson scoring with analytical win/draw/loss estimates and host boost"
+          matchModel: "Strength-adjusted Poisson scoring with analytical win/draw/loss estimates and host boost",
+          calibration: calibrationSummary
         },
+        calibration: Object.assign({}, activeCalibration),
         probabilities,
         groupProjections: groupProjectionRows(normalizedTeams, summary, simulationCount),
         groupMatchForecasts: buildGroupMatchForecasts(normalizedTeams),
         latestTournament
       };
+      } finally {
+        activeCalibration = previousCalibration;
+      }
+    }
+
+    function describeCalibration(calibration) {
+      const isDefault =
+        calibration.goalRatingDivisor === CALIBRATION_DEFAULTS.goalRatingDivisor &&
+        calibration.hostBonusScale === CALIBRATION_DEFAULTS.hostBonusScale &&
+        calibration.baseGoalsScale === CALIBRATION_DEFAULTS.baseGoalsScale;
+      if (isDefault) {
+        return "Default weights (no tournament results yet to tune against)";
+      }
+      return "Tuned: divisor " + calibration.goalRatingDivisor.toFixed(0) + ", host×" + calibration.hostBonusScale.toFixed(2) + ", goals×" + calibration.baseGoalsScale.toFixed(2);
     }
 
     module.exports = {
       GROUP_ORDER,
-      runSimulations
+      runSimulations,
+      computeMatchProbabilities,
+      CALIBRATION_DEFAULTS
     };
   })(moduleShim);
 

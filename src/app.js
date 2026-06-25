@@ -84,7 +84,8 @@ async function main() {
 
   function enrichWithDerivedContext(teamList, asOfIso) {
     if (!derivedContextApi) return teamList;
-    return derivedContextApi.applyDerivedContext(teamList, {
+    const ratingUpdated = derivedContextApi.applyResultUpdates(teamList, completedResults);
+    return derivedContextApi.applyDerivedContext(ratingUpdated, {
       results: completedResults,
       fixtures,
       historicalResults,
@@ -92,8 +93,15 @@ async function main() {
     });
   }
 
+  function computeCalibration(teamList) {
+    if (!derivedContextApi) return { calibration: null, meta: { tuned: false } };
+    const tuned = derivedContextApi.calibrateAgainstResults(teamList, completedResults, model);
+    return { calibration: tuned.calibration, meta: tuned };
+  }
+
   const baseTeamsWithContext = mergeTeamContext(teams);
   let teamsWithContext = enrichWithDerivedContext(baseTeamsWithContext, null);
+  let activeCalibration = computeCalibration(teamsWithContext).calibration;
 
   function getTodayIsoDate() {
     const now = new Date();
@@ -513,10 +521,12 @@ async function main() {
 
   function run() {
     teamsWithContext = enrichWithDerivedContext(baseTeamsWithContext, controls.selectedDate.value);
+    activeCalibration = computeCalibration(teamsWithContext).calibration;
     const result = model.runSimulations(
       teamsWithContext,
       Number(controls.simulations.value || 5000),
-      Number(controls.seed.value)
+      Number(controls.seed.value),
+      activeCalibration
     );
     render(result);
   }
