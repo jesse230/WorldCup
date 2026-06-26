@@ -1,3 +1,10 @@
+(function (root, factory) {
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = factory();
+  } else {
+    root.WorldCupPredictor = factory();
+  }
+})(typeof self !== "undefined" ? self : this, function () {
 const GROUP_ORDER = "ABCDEFGHIJKL".split("");
 const HOST_GROUPS = {
   Mexico: "A",
@@ -73,6 +80,19 @@ function poisson(lambda, rng) {
   }
 
   return count - 1;
+}
+
+function wilsonInterval(successes, total) {
+  if (!total || total <= 0) return { low: 0, high: 0 };
+  const z = 1.96;
+  const p = successes / total;
+  const denom = 1 + z * z / total;
+  const center = (p + z * z / (2 * total)) / denom;
+  const half = (z * Math.sqrt(p * (1 - p) / total + z * z / (4 * total * total))) / denom;
+  return {
+    low: Math.max(0, center - half),
+    high: Math.min(1, center + half)
+  };
 }
 
 function poissonPmf(lambda, goals) {
@@ -404,10 +424,89 @@ function poissonBuckets(lambda, maxBucket = MAX_GOAL_BUCKET) {
   return values;
 }
 
+const SCORE_GRID_AXIS = 6;
+
+function buildScoreGrid(homeBuckets, awayBuckets) {
+  const tailHome = [];
+  for (let i = 0; i < SCORE_GRID_AXIS - 1; i += 1) {
+    tailHome.push(homeBuckets[i] || 0);
+  }
+  let homeTailSum = 0;
+  for (let i = SCORE_GRID_AXIS - 1; i < homeBuckets.length; i += 1) {
+    homeTailSum += homeBuckets[i] || 0;
+  }
+  tailHome.push(homeTailSum);
+
+  const tailAway = [];
+  for (let i = 0; i < SCORE_GRID_AXIS - 1; i += 1) {
+    tailAway.push(awayBuckets[i] || 0);
+  }
+  let awayTailSum = 0;
+  for (let i = SCORE_GRID_AXIS - 1; i < awayBuckets.length; i += 1) {
+    awayTailSum += awayBuckets[i] || 0;
+  }
+  tailAway.push(awayTailSum);
+
+  const cells = [];
+  for (let row = 0; row < SCORE_GRID_AXIS; row += 1) {
+    const rowCells = [];
+    for (let col = 0; col < SCORE_GRID_AXIS; col += 1) {
+      rowCells.push(tailHome[row] * tailAway[col]);
+    }
+    cells.push(rowCells);
+  }
+  return { axisLabel: SCORE_GRID_AXIS - 1, cells };
+}
+
+function buildFactorBreakdown(teamA, teamB) {
+  const adjA = getContextAdjustments(teamA);
+  const adjB = getContextAdjustments(teamB);
+  const contextWeights = {
+    form: 0.5,
+    squad: 0.4,
+    chemistry: 0.425,
+    injuries: 0.425,
+    fatigue: 0.225
+  };
+
+  const hostBonus = (HOST_ATTACK_BONUS + HOST_DEFENSE_BONUS) / 2 * activeCalibration.hostBonusScale;
+  const hostA = teamA.host ? hostBonus : 0;
+  const hostB = teamB.host ? hostBonus : 0;
+
+  const entries = [
+    { factor: "Base rating", valueA: Number(teamA.rating) || 0, valueB: Number(teamB.rating) || 0 },
+    { factor: "Host advantage", valueA: hostA, valueB: hostB },
+    { factor: "Rest days", valueA: restAdjustmentValue(teamA), valueB: restAdjustmentValue(teamB) },
+    { factor: "Head-to-head", valueA: h2hBiasFor(teamA, teamB.name), valueB: -h2hBiasFor(teamB, teamA.name) }
+  ];
+
+  for (const key of Object.keys(contextWeights)) {
+    const weight = contextWeights[key];
+    entries.push({
+      factor: CONTEXT_LABELS[key].charAt(0).toUpperCase() + CONTEXT_LABELS[key].slice(1),
+      valueA: adjA[key] * weight,
+      valueB: adjB[key] * weight
+    });
+  }
+
+  return entries
+    .map((entry) => ({
+      factor: entry.factor,
+      valueA: Math.round(entry.valueA * 10) / 10,
+      valueB: Math.round(entry.valueB * 10) / 10,
+      delta: Math.round((entry.valueA - entry.valueB) * 10) / 10
+    }))
+    .filter((entry) => entry.delta !== 0 || entry.factor === "Base rating")
+    .sort((a, b) => Math.abs(b.delta) - Math.abs(a.delta))
+    .slice(0, 6);
+}
+
 function buildMatchForecast(teamA, teamB, knockout = false) {
   const xg = goalExpectancy(teamA, teamB);
   const homeBuckets = poissonBuckets(xg.home);
   const awayBuckets = poissonBuckets(xg.away);
+  const scoreGrid = buildScoreGrid(homeBuckets, awayBuckets);
+  const factorBreakdown = buildFactorBreakdown(teamA, teamB);
   let teamAWin = 0;
   let draw = 0;
   let teamBWin = 0;
@@ -464,7 +563,9 @@ function buildMatchForecast(teamA, teamB, knockout = false) {
     draw,
     teamBWin,
     teamAAdvance: knockout ? teamAWin + draw * penaltiesEdge : null,
-    teamBAdvance: knockout ? teamBWin + draw * (1 - penaltiesEdge) : null
+    teamBAdvance: knockout ? teamBWin + draw * (1 - penaltiesEdge) : null,
+    scoreGrid,
+    factorBreakdown
   };
 }
 
@@ -824,6 +925,11 @@ function runSimulations(teams, simulationCount = 2000, seed = 20260611, calibrat
   const probabilities = normalizedTeams
     .map((team) => {
       const record = summary.get(team.name);
+      const wilson = (count) => wilsonInterval(count, simulationCount);
+      const champion = wilson(record.champion);
+      const advance = wilson(record.advanceFromGroup);
+      const reachFinal = wilson(record.final);
+      const groupWinCI = wilson(record.groupWin);
       return {
         team: team.name,
         group: team.group,
@@ -837,7 +943,11 @@ function runSimulations(teams, simulationCount = 2000, seed = 20260611, calibrat
         finish3: record.finish3 / simulationCount,
         finish4: record.finish4 / simulationCount,
         groupWin: record.groupWin / simulationCount,
+        groupWinLow: groupWinCI.low,
+        groupWinHigh: groupWinCI.high,
         advanceFromGroup: record.advanceFromGroup / simulationCount,
+        advanceFromGroupLow: advance.low,
+        advanceFromGroupHigh: advance.high,
         averagePoints: record.totalPoints / simulationCount,
         averageGoalDifference: record.totalGoalDifference / simulationCount,
         reachRoundOf32: record.roundOf32 / simulationCount,
@@ -845,7 +955,11 @@ function runSimulations(teams, simulationCount = 2000, seed = 20260611, calibrat
         reachQuarterFinals: record.quarterFinals / simulationCount,
         reachSemiFinals: record.semiFinals / simulationCount,
         reachFinal: record.final / simulationCount,
-        winTournament: record.champion / simulationCount
+        reachFinalLow: reachFinal.low,
+        reachFinalHigh: reachFinal.high,
+        winTournament: record.champion / simulationCount,
+        winTournamentLow: champion.low,
+        winTournamentHigh: champion.high
       };
     })
     .sort((a, b) => b.winTournament - a.winTournament || b.reachFinal - a.reachFinal);
@@ -884,9 +998,10 @@ function describeCalibration(calibration) {
   return `Tuned: divisor ${calibration.goalRatingDivisor.toFixed(0)}, host×${calibration.hostBonusScale.toFixed(2)}, goals×${calibration.baseGoalsScale.toFixed(2)}`;
 }
 
-module.exports = {
+return {
   GROUP_ORDER,
   runSimulations,
   computeMatchProbabilities,
   CALIBRATION_DEFAULTS
 };
+});

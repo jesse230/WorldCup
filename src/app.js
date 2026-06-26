@@ -345,7 +345,71 @@ async function main() {
           <span>Draw ${(forecast.draw * 100).toFixed(1)}%</span>
           <strong>${forecast.edgeSummary}</strong>
         </div>
+        ${renderScoreGrid(forecast, isForward)}
+        ${renderFactorBreakdown(forecast, isForward)}
       </div>
+    `;
+  }
+
+  function renderScoreGrid(forecast, isForward) {
+    if (!forecast.scoreGrid) return "";
+    const rows = forecast.scoreGrid.cells;
+    const axisMax = forecast.scoreGrid.axisLabel;
+    const reorient = (rowIdx, colIdx) => (isForward ? rows[rowIdx][colIdx] : rows[colIdx][rowIdx]);
+    let max = 0;
+    for (const row of rows) for (const v of row) if (v > max) max = v;
+    const cells = [];
+    for (let r = 0; r < rows.length; r += 1) {
+      for (let c = 0; c < rows.length; c += 1) {
+        const p = reorient(r, c);
+        const intensity = max > 0 ? Math.min(1, p / max) : 0;
+        cells.push(`<div class="grid-cell" style="background: rgba(232, 79, 47, ${0.08 + 0.62 * intensity})" title="${r}-${c}: ${(p * 100).toFixed(1)}%">${p >= 0.05 ? (p * 100).toFixed(0) : ""}</div>`);
+      }
+    }
+    const axisLabels = Array.from({ length: rows.length }, (_, i) => i === axisMax ? `${i}+` : `${i}`);
+    return `
+      <div class="score-grid-wrap">
+        <div class="score-grid-title">Likely scoreline (% chance)</div>
+        <div class="score-grid" style="grid-template-columns: 22px repeat(${rows.length}, 1fr)">
+          <div class="grid-corner"></div>
+          ${axisLabels.map((l) => `<div class="grid-axis">${l}</div>`).join("")}
+          ${axisLabels
+            .map(
+              (rowLabel, rowIdx) => `
+                <div class="grid-axis">${rowLabel}</div>
+                ${cells.slice(rowIdx * rows.length, (rowIdx + 1) * rows.length).join("")}
+              `
+            )
+            .join("")}
+        </div>
+      </div>
+    `;
+  }
+
+  function renderFactorBreakdown(forecast, isForward) {
+    if (!forecast.factorBreakdown || !forecast.factorBreakdown.length) return "";
+    const items = forecast.factorBreakdown;
+    const maxAbs = items.reduce((acc, item) => Math.max(acc, Math.abs(item.delta)), 0) || 1;
+    const rows = items
+      .map((item) => {
+        const delta = isForward ? item.delta : -item.delta;
+        const width = Math.max(2, Math.min(100, (Math.abs(delta) / maxAbs) * 100));
+        const side = delta >= 0 ? "favourA" : "favourB";
+        const sign = delta > 0 ? "+" : "";
+        return `
+          <div class="breakdown-row">
+            <div class="breakdown-label">${item.factor}</div>
+            <div class="breakdown-bar"><div class="breakdown-fill ${side}" style="width: ${width}%"></div></div>
+            <div class="breakdown-delta">${sign}${delta}</div>
+          </div>
+        `;
+      })
+      .join("");
+    return `
+      <details class="why-prediction">
+        <summary>Why this prediction?</summary>
+        <div class="breakdown-list">${rows}</div>
+      </details>
     `;
   }
 
@@ -398,6 +462,8 @@ async function main() {
                   <strong>${forecast.edgeSummary}</strong>
                   <small>${forecast.edgeReasons.join(" | ")}</small>
                 </div>
+                ${renderScoreGrid(forecast, isForward)}
+                ${renderFactorBreakdown(forecast, isForward)}
               </article>
             `;
           })
@@ -419,6 +485,12 @@ async function main() {
     });
 
     topTable.innerHTML = "";
+    const fmtPct = (value) => `${(value * 100).toFixed(1)}%`;
+    const fmtCi = (low, high) => {
+      if (low === undefined || high === undefined) return "";
+      const half = ((high - low) / 2) * 100;
+      return `<small class="ci-band">±${half.toFixed(1)}</small>`;
+    };
     result.probabilities.slice(0, 16).forEach((team, index) => {
       const row = document.createElement("tr");
       row.innerHTML = `
@@ -427,10 +499,10 @@ async function main() {
         <td>${team.group}</td>
         <td>${team.rating}</td>
         <td>${Math.round(team.adjustedRating)}</td>
-        <td>${(team.winTournament * 100).toFixed(1)}%</td>
-        <td>${(team.advanceFromGroup * 100).toFixed(1)}%</td>
-        <td>${(team.reachFinal * 100).toFixed(1)}%</td>
-        <td>${(team.reachSemiFinals * 100).toFixed(1)}%</td>
+        <td>${fmtPct(team.winTournament)} ${fmtCi(team.winTournamentLow, team.winTournamentHigh)}</td>
+        <td>${fmtPct(team.advanceFromGroup)} ${fmtCi(team.advanceFromGroupLow, team.advanceFromGroupHigh)}</td>
+        <td>${fmtPct(team.reachFinal)} ${fmtCi(team.reachFinalLow, team.reachFinalHigh)}</td>
+        <td>${fmtPct(team.reachSemiFinals)}</td>
       `;
       topTable.appendChild(row);
     });

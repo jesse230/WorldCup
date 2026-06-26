@@ -1,3 +1,10 @@
+(function (root, factory) {
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = factory();
+  } else {
+    root.WorldCupDerivedContext = factory();
+  }
+})(typeof self !== "undefined" ? self : this, function () {
 const FORM_LOOKBACK = 5;
 const FORM_GOAL_DIFF_WEIGHT = 4;
 const FORM_RESULT_WEIGHT = 6;
@@ -323,7 +330,7 @@ function calibrateAgainstResults(teams, results, model) {
   };
 }
 
-module.exports = {
+return {
   deriveFormAdjustment,
   computeRestAdjustment,
   computeH2HBias,
@@ -332,3 +339,4 @@ module.exports = {
   applyResultUpdates,
   calibrateAgainstResults
 };
+});

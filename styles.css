@@ -792,3 +792,124 @@ td {
     justify-content: flex-start;
   }
 }
+
+.score-grid-wrap {
+  margin-top: 12px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(245, 241, 230, 0.1);
+}
+
+.score-grid-title {
+  font-size: 0.78rem;
+  color: var(--muted);
+  text-transform: uppercase;
+  letter-spacing: 0.1em;
+  margin-bottom: 6px;
+}
+
+.score-grid {
+  display: grid;
+  gap: 2px;
+  font-size: 0.68rem;
+}
+
+.grid-cell {
+  aspect-ratio: 1;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  border-radius: 4px;
+  color: var(--ink);
+  font-weight: 600;
+  min-height: 22px;
+}
+
+.grid-axis {
+  color: var(--muted);
+  font-size: 0.66rem;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.grid-corner {
+  visibility: hidden;
+}
+
+.why-prediction {
+  margin-top: 10px;
+  padding-top: 10px;
+  border-top: 1px solid rgba(245, 241, 230, 0.1);
+}
+
+.why-prediction summary {
+  cursor: pointer;
+  font-size: 0.82rem;
+  color: var(--accent-gold);
+  letter-spacing: 0.04em;
+  list-style: none;
+}
+
+.why-prediction summary::-webkit-details-marker {
+  display: none;
+}
+
+.why-prediction summary::before {
+  content: "▸ ";
+  color: var(--accent-gold);
+  margin-right: 4px;
+}
+
+.why-prediction[open] summary::before {
+  content: "▾ ";
+}
+
+.breakdown-list {
+  margin-top: 8px;
+  display: grid;
+  gap: 4px;
+}
+
+.breakdown-row {
+  display: grid;
+  grid-template-columns: 110px 1fr 48px;
+  gap: 8px;
+  align-items: center;
+  font-size: 0.78rem;
+}
+
+.breakdown-label {
+  color: var(--ink-soft);
+}
+
+.breakdown-bar {
+  height: 8px;
+  background: rgba(245, 241, 230, 0.06);
+  border-radius: 4px;
+  overflow: hidden;
+}
+
+.breakdown-fill {
+  height: 100%;
+  border-radius: 4px;
+}
+
+.breakdown-fill.favourA {
+  background: var(--accent-teal);
+}
+
+.breakdown-fill.favourB {
+  background: var(--accent);
+}
+
+.breakdown-delta {
+  font-variant-numeric: tabular-nums;
+  text-align: right;
+  color: var(--ink);
+}
+
+.ci-band {
+  color: var(--muted);
+  font-size: 0.72rem;
+  margin-left: 4px;
+}

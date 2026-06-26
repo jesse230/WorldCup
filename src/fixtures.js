@@ -1,3 +1,10 @@
+(function (root, factory) {
+  if (typeof module !== "undefined" && module.exports) {
+    module.exports = factory();
+  } else {
+    root.WorldCupFixtures = factory();
+  }
+})(typeof self !== "undefined" ? self : this, function () {
 const TEAM_FLAG_CODES = {
   Mexico: "mx",
   "South Africa": "za",
@@ -157,9 +164,10 @@ function formatDisplayDate(isoDate) {
   }).format(date);
 }
 
-module.exports = {
+return {
   TEAM_FLAG_CODES,
   buildFlagLabel,
   buildGroupStageFixtures,
   formatDisplayDate
 };
+});
