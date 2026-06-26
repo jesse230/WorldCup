@@ -370,7 +370,7 @@ async function main() {
     return `
       <div class="score-grid-wrap">
         <div class="score-grid-title">Likely scoreline (% chance)</div>
-        <div class="score-grid" style="grid-template-columns: 22px repeat(${rows.length}, 1fr)">
+        <div class="score-grid" style="grid-template-columns: 18px repeat(${rows.length}, minmax(0, 1fr))">
           <div class="grid-corner"></div>
           ${axisLabels.map((l) => `<div class="grid-axis">${l}</div>`).join("")}
           ${axisLabels
