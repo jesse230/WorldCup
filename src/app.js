@@ -444,14 +444,14 @@ async function main() {
                     ${fixturesApi.buildFlagLabel(fixture.teamA)}
                     <strong>${fixture.teamA}</strong>
                     <small>${(teamAWin * 100).toFixed(1)}% win</small>
-                    <small class="context-line">Adj ${isForward ? forecast.adjustedRatingA : forecast.adjustedRatingB}</small>
+                    <small class="context-line">Adj ${Math.round(isForward ? forecast.adjustedRatingA : forecast.adjustedRatingB)}</small>
                   </div>
                   <div class="today-vs">vs</div>
                   <div class="today-team">
                     ${fixturesApi.buildFlagLabel(fixture.teamB)}
                     <strong>${fixture.teamB}</strong>
                     <small>${(teamBWin * 100).toFixed(1)}% win</small>
-                    <small class="context-line">Adj ${isForward ? forecast.adjustedRatingB : forecast.adjustedRatingA}</small>
+                    <small class="context-line">Adj ${Math.round(isForward ? forecast.adjustedRatingB : forecast.adjustedRatingA)}</small>
                   </div>
                 </div>
                 <div class="today-stats">
