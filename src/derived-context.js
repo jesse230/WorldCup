@@ -211,8 +211,11 @@ function movMultiplier(goalDiffAbs, ratingGap) {
   return Math.max(1, goalTerm * damp);
 }
 
-function applyResultUpdates(teams, results) {
+function applyResultUpdates(teams, results, options) {
   if (!Array.isArray(results) || results.length === 0) return teams.map((team) => ({ ...team }));
+
+  const eloK = Number.isFinite(options && options.eloK) ? Number(options.eloK) : ELO_K;
+  const maxNudge = Number.isFinite(options && options.maxNudge) ? Number(options.maxNudge) : ELO_MAX_NUDGE;
 
   const ratings = new Map(teams.map((team) => [team.name, Number(team.rating) || 0]));
   const baseRatings = new Map(ratings);
@@ -231,8 +234,8 @@ function applyResultUpdates(teams, results) {
     const expectedA = eloExpected(ratingA, ratingB);
     const actualA = actualScoreFor(scoreA, scoreB);
     const mov = movMultiplier(Math.abs(scoreA - scoreB), ratingA - ratingB);
-    const rawDelta = ELO_K * mov * (actualA - expectedA);
-    const delta = clamp(rawDelta, -ELO_MAX_NUDGE, ELO_MAX_NUDGE);
+    const rawDelta = eloK * mov * (actualA - expectedA);
+    const delta = clamp(rawDelta, -maxNudge, maxNudge);
 
     ratings.set(match.teamA, ratingA + delta);
     ratings.set(match.teamB, ratingB - delta);
@@ -275,22 +278,23 @@ function totalLogLikelihood(teams, results, calibration, computeMatchProbabiliti
   return total;
 }
 
-function calibrateAgainstResults(teams, results, model) {
+function calibrateAgainstResults(teams, results, model, options) {
   const defaults = (model && model.CALIBRATION_DEFAULTS) || {
     goalRatingDivisor: 575,
     hostBonusScale: 1,
     baseGoalsScale: 1
   };
   const computeMatchProbabilities = model && model.computeMatchProbabilities;
+  const minResults = Number.isFinite(options && options.minResults) ? Number(options.minResults) : ELO_MIN_RESULTS_FOR_TUNE;
 
-  if (!Array.isArray(results) || results.length < ELO_MIN_RESULTS_FOR_TUNE || !computeMatchProbabilities) {
+  if (!Array.isArray(results) || results.length < minResults || !computeMatchProbabilities) {
     return {
       calibration: { ...defaults },
       tuned: false,
       sampleSize: Array.isArray(results) ? results.length : 0,
       reason: !computeMatchProbabilities
         ? "predictor missing computeMatchProbabilities export"
-        : `need >=${ELO_MIN_RESULTS_FOR_TUNE} results, have ${(results || []).length}`
+        : `need >=${minResults} results, have ${(results || []).length}`
     };
   }
 

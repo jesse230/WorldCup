@@ -66,6 +66,8 @@
           <input id="seed" type="number" value="20260611">
         </label>
         <button id="run" type="button">Run Predictor</button>
+        <div id="sim-spinner" class="sim-spinner"><span class="sim-spinner-dot"></span><span>Running simulations…</span></div>
+        <button id="settings-toggle" type="button" class="settings-toggle">Model settings</button>
       </section>
 
       <section class="panel assumptions-panel">
@@ -79,20 +81,21 @@
             <p class="eyebrow">Outright Market</p>
             <h2>Top title chances</h2>
           </div>
+          <div id="confed-filters" class="confed-filters" role="group" aria-label="Filter by confederation"></div>
         </div>
         <div class="table-shell">
           <table id="top-table">
             <thead>
               <tr>
                 <th>#</th>
-                <th>Team</th>
-                <th>Group</th>
-                <th>Rating</th>
-                <th>Adj Rt</th>
-                <th>Win</th>
-                <th>Advance</th>
-                <th>Final</th>
-                <th>Semi</th>
+                <th data-sort="team">Team</th>
+                <th data-sort="group">Group</th>
+                <th data-sort="rating">Rating</th>
+                <th data-sort="adjustedRating">Adj Rt</th>
+                <th data-sort="winTournament">Win</th>
+                <th data-sort="advanceFromGroup">Advance</th>
+                <th data-sort="reachFinal">Final</th>
+                <th data-sort="reachSemiFinals">Semi</th>
               </tr>
             </thead>
             <tbody></tbody>
@@ -130,6 +133,56 @@
         <div id="sample-bracket"></div>
       </section>
     </main>
+
+    <aside id="settings-drawer" class="settings-drawer" aria-hidden="true">
+      <header class="settings-drawer-head">
+        <h3>Model settings</h3>
+        <button id="settings-close" type="button" class="icon-button" aria-label="Close settings">×</button>
+      </header>
+      <div class="settings-body">
+        <label class="settings-field">
+          <span class="settings-label">Elo K factor <small id="eloK-value">20</small></span>
+          <input id="settings-eloK" type="range" min="5" max="50" step="1" value="20">
+          <small class="settings-hint">How aggressively past results move ratings</small>
+        </label>
+        <label class="settings-field">
+          <span class="settings-label">Max nudge per match <small id="maxNudge-value">25</small></span>
+          <input id="settings-maxNudge" type="range" min="5" max="50" step="1" value="25">
+          <small class="settings-hint">Caps Elo swing from a single result</small>
+        </label>
+        <label class="settings-field">
+          <span class="settings-label">Min results to tune calibration</span>
+          <input id="settings-minResults" type="number" min="0" max="64" step="1" value="12">
+          <small class="settings-hint">Self-tune skipped until this many matches are logged</small>
+        </label>
+        <fieldset class="settings-fieldset">
+          <legend>Calibration override</legend>
+          <label class="settings-field">
+            <span class="settings-label">Goal rating divisor</span>
+            <input id="settings-goalRatingDivisor" type="number" min="100" max="2000" step="5" placeholder="auto">
+          </label>
+          <label class="settings-field">
+            <span class="settings-label">Host bonus scale</span>
+            <input id="settings-hostBonusScale" type="number" min="0" max="3" step="0.05" placeholder="auto">
+          </label>
+          <label class="settings-field">
+            <span class="settings-label">Base goals scale</span>
+            <input id="settings-baseGoalsScale" type="number" min="0.5" max="2" step="0.05" placeholder="auto">
+          </label>
+          <button id="settings-reset-calibration" type="button" class="ghost-button">Use auto-tuned</button>
+        </fieldset>
+        <button id="settings-reset-all" type="button" class="ghost-button danger">Restore defaults</button>
+      </div>
+    </aside>
+    <div id="settings-backdrop" class="settings-backdrop" hidden></div>
+
+    <dialog id="team-modal" class="team-modal" aria-labelledby="team-modal-title">
+      <header class="team-modal-head">
+        <h3 id="team-modal-title">Team</h3>
+        <button id="team-modal-close" type="button" class="icon-button" aria-label="Close team details">×</button>
+      </header>
+      <div id="team-modal-body" class="team-modal-body"></div>
+    </dialog>
 
     <script src="./src/fixtures.js"></script>
     <script src="./src/predictor.js"></script>

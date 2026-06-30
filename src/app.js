@@ -82,9 +82,40 @@ async function main() {
     });
   }
 
+  const DEFAULT_SETTINGS = {
+    eloK: 20,
+    maxNudge: 25,
+    minResults: 12,
+    calibrationOverride: { goalRatingDivisor: null, hostBonusScale: null, baseGoalsScale: null }
+  };
+
+  function loadSettings() {
+    try {
+      const stored = JSON.parse(localStorage.getItem("worldcup-settings-v1") || "{}");
+      return {
+        ...DEFAULT_SETTINGS,
+        ...stored,
+        calibrationOverride: { ...DEFAULT_SETTINGS.calibrationOverride, ...(stored.calibrationOverride || {}) }
+      };
+    } catch {
+      return { ...DEFAULT_SETTINGS, calibrationOverride: { ...DEFAULT_SETTINGS.calibrationOverride } };
+    }
+  }
+
+  function saveSettings() {
+    try {
+      localStorage.setItem("worldcup-settings-v1", JSON.stringify(settings));
+    } catch {}
+  }
+
+  let settings = loadSettings();
+
   function enrichWithDerivedContext(teamList, asOfIso) {
     if (!derivedContextApi) return teamList;
-    const ratingUpdated = derivedContextApi.applyResultUpdates(teamList, completedResults);
+    const ratingUpdated = derivedContextApi.applyResultUpdates(teamList, completedResults, {
+      eloK: settings.eloK,
+      maxNudge: settings.maxNudge
+    });
     return derivedContextApi.applyDerivedContext(ratingUpdated, {
       results: completedResults,
       fixtures,
@@ -95,8 +126,15 @@ async function main() {
 
   function computeCalibration(teamList) {
     if (!derivedContextApi) return { calibration: null, meta: { tuned: false } };
-    const tuned = derivedContextApi.calibrateAgainstResults(teamList, completedResults, model);
-    return { calibration: tuned.calibration, meta: tuned };
+    const tuned = derivedContextApi.calibrateAgainstResults(teamList, completedResults, model, {
+      minResults: settings.minResults
+    });
+    const override = settings.calibrationOverride || {};
+    const merged = { ...tuned.calibration };
+    if (override.goalRatingDivisor !== null && Number.isFinite(override.goalRatingDivisor)) merged.goalRatingDivisor = override.goalRatingDivisor;
+    if (override.hostBonusScale !== null && Number.isFinite(override.hostBonusScale)) merged.hostBonusScale = override.hostBonusScale;
+    if (override.baseGoalsScale !== null && Number.isFinite(override.baseGoalsScale)) merged.baseGoalsScale = override.baseGoalsScale;
+    return { calibration: merged, meta: tuned };
   }
 
   const baseTeamsWithContext = mergeTeamContext(teams);
@@ -471,6 +509,62 @@ async function main() {
       : `<div class="today-empty">No scheduled group-stage matches for this date.</div>`;
   }
 
+  const fmtPct = (value) => `${(value * 100).toFixed(1)}%`;
+  const fmtCi = (low, high) => {
+    if (low === undefined || high === undefined) return "";
+    const half = ((high - low) / 2) * 100;
+    return `<small class="ci-band">±${half.toFixed(1)}</small>`;
+  };
+  const confederationFor = (teamName) => (teamsWithContext.find((t) => t.name === teamName) || {}).confederation || "";
+
+  function renderTopTable(result) {
+    const rows = result.probabilities
+      .filter((row) => tableState.confederations.has(confederationFor(row.team)))
+      .slice();
+    const direction = tableState.sortDirection === "asc" ? 1 : -1;
+    const col = tableState.sortColumn;
+    rows.sort((a, b) => {
+      const av = a[col];
+      const bv = b[col];
+      if (typeof av === "string") return direction * av.localeCompare(bv);
+      return direction * ((av || 0) - (bv || 0));
+    });
+
+    topTable.innerHTML = "";
+    rows.slice(0, 16).forEach((team, index) => {
+      const tr = document.createElement("tr");
+      tr.innerHTML = `
+        <td>${index + 1}</td>
+        <td><button type="button" class="team-link" data-team="${team.team}">${team.team}</button></td>
+        <td>${team.group}</td>
+        <td>${team.rating}</td>
+        <td>${Math.round(team.adjustedRating)}</td>
+        <td>${fmtPct(team.winTournament)} ${fmtCi(team.winTournamentLow, team.winTournamentHigh)}</td>
+        <td>${fmtPct(team.advanceFromGroup)} ${fmtCi(team.advanceFromGroupLow, team.advanceFromGroupHigh)}</td>
+        <td>${fmtPct(team.reachFinal)} ${fmtCi(team.reachFinalLow, team.reachFinalHigh)}</td>
+        <td>${fmtPct(team.reachSemiFinals)}</td>
+      `;
+      topTable.appendChild(tr);
+    });
+
+    document.querySelectorAll("#top-table thead th[data-sort]").forEach((th) => {
+      const key = th.dataset.sort;
+      th.classList.toggle("sort-active", key === col);
+      th.classList.toggle("sort-asc", key === col && direction > 0);
+      th.classList.toggle("sort-desc", key === col && direction < 0);
+    });
+  }
+
+  function renderConfedFilters() {
+    const host = document.querySelector("#confed-filters");
+    if (!host) return;
+    host.innerHTML = ["UEFA", "CONMEBOL", "CONCACAF", "CAF", "AFC", "OFC"]
+      .map(
+        (key) => `<button type="button" class="confed-chip ${tableState.confederations.has(key) ? "active" : ""}" data-confed="${key}">${key}</button>`
+      )
+      .join("");
+  }
+
   function render(result) {
     renderModelStatus(result);
     renderFeaturedMatch(result);
@@ -484,28 +578,7 @@ async function main() {
       assumptions.appendChild(item);
     });
 
-    topTable.innerHTML = "";
-    const fmtPct = (value) => `${(value * 100).toFixed(1)}%`;
-    const fmtCi = (low, high) => {
-      if (low === undefined || high === undefined) return "";
-      const half = ((high - low) / 2) * 100;
-      return `<small class="ci-band">±${half.toFixed(1)}</small>`;
-    };
-    result.probabilities.slice(0, 16).forEach((team, index) => {
-      const row = document.createElement("tr");
-      row.innerHTML = `
-        <td>${index + 1}</td>
-        <td>${team.team}</td>
-        <td>${team.group}</td>
-        <td>${team.rating}</td>
-        <td>${Math.round(team.adjustedRating)}</td>
-        <td>${fmtPct(team.winTournament)} ${fmtCi(team.winTournamentLow, team.winTournamentHigh)}</td>
-        <td>${fmtPct(team.advanceFromGroup)} ${fmtCi(team.advanceFromGroupLow, team.advanceFromGroupHigh)}</td>
-        <td>${fmtPct(team.reachFinal)} ${fmtCi(team.reachFinalLow, team.reachFinalHigh)}</td>
-        <td>${fmtPct(team.reachSemiFinals)}</td>
-      `;
-      topTable.appendChild(row);
-    });
+    renderTopTable(result);
 
     groupGrid.innerHTML = result.groupProjections
       .map((group) => {
@@ -591,20 +664,277 @@ async function main() {
       .join("");
   }
 
+  let simWorker = null;
+  let pendingRunId = 0;
+  let latestResult = null;
+
+  function getWorker() {
+    if (simWorker || typeof Worker === "undefined") return simWorker;
+    try {
+      simWorker = new Worker("./src/sim-worker.js");
+      simWorker.onmessage = (event) => {
+        const data = event.data || {};
+        if (data.runId !== pendingRunId) return;
+        setSpinner(false);
+        if (data.type === "result") {
+          latestResult = data.result;
+          render(data.result);
+        }
+      };
+      simWorker.onerror = () => {
+        simWorker = null;
+        setSpinner(false);
+      };
+    } catch {
+      simWorker = null;
+    }
+    return simWorker;
+  }
+
+  function setSpinner(visible) {
+    const el = document.querySelector("#sim-spinner");
+    if (!el) return;
+    el.classList.toggle("active", !!visible);
+  }
+
   function run() {
     teamsWithContext = enrichWithDerivedContext(baseTeamsWithContext, controls.selectedDate.value);
     activeCalibration = computeCalibration(teamsWithContext).calibration;
-    const result = model.runSimulations(
-      teamsWithContext,
-      Number(controls.simulations.value || 5000),
-      Number(controls.seed.value),
-      activeCalibration
-    );
+    const simulationCount = Number(controls.simulations.value || 5000);
+    const seed = Number(controls.seed.value);
+    pendingRunId += 1;
+
+    const worker = getWorker();
+    if (worker) {
+      setSpinner(true);
+      worker.postMessage({
+        type: "run",
+        runId: pendingRunId,
+        teams: teamsWithContext,
+        simulationCount,
+        seed,
+        calibration: activeCalibration
+      });
+      return;
+    }
+
+    const result = model.runSimulations(teamsWithContext, simulationCount, seed, activeCalibration);
+    latestResult = result;
     render(result);
   }
 
   controls.run.addEventListener("click", run);
   controls.selectedDate.addEventListener("input", run);
+
+  // ---- Settings drawer ----
+  const drawer = document.querySelector("#settings-drawer");
+  const drawerBackdrop = document.querySelector("#settings-backdrop");
+  const settingsToggle = document.querySelector("#settings-toggle");
+  const settingsClose = document.querySelector("#settings-close");
+  let debounceHandle = null;
+  const debouncedRun = () => {
+    if (debounceHandle) clearTimeout(debounceHandle);
+    debounceHandle = setTimeout(() => {
+      debounceHandle = null;
+      run();
+    }, 200);
+  };
+  const openDrawer = () => {
+    drawer.classList.add("open");
+    drawer.setAttribute("aria-hidden", "false");
+    drawerBackdrop.hidden = false;
+  };
+  const closeDrawer = () => {
+    drawer.classList.remove("open");
+    drawer.setAttribute("aria-hidden", "true");
+    drawerBackdrop.hidden = true;
+  };
+  settingsToggle.addEventListener("click", openDrawer);
+  settingsClose.addEventListener("click", closeDrawer);
+  drawerBackdrop.addEventListener("click", closeDrawer);
+
+  const fields = {
+    eloK: document.querySelector("#settings-eloK"),
+    maxNudge: document.querySelector("#settings-maxNudge"),
+    minResults: document.querySelector("#settings-minResults"),
+    goalRatingDivisor: document.querySelector("#settings-goalRatingDivisor"),
+    hostBonusScale: document.querySelector("#settings-hostBonusScale"),
+    baseGoalsScale: document.querySelector("#settings-baseGoalsScale")
+  };
+  function syncFieldsFromSettings() {
+    fields.eloK.value = settings.eloK;
+    fields.maxNudge.value = settings.maxNudge;
+    fields.minResults.value = settings.minResults;
+    fields.goalRatingDivisor.value = settings.calibrationOverride.goalRatingDivisor ?? "";
+    fields.hostBonusScale.value = settings.calibrationOverride.hostBonusScale ?? "";
+    fields.baseGoalsScale.value = settings.calibrationOverride.baseGoalsScale ?? "";
+    document.querySelector("#eloK-value").textContent = settings.eloK;
+    document.querySelector("#maxNudge-value").textContent = settings.maxNudge;
+  }
+  syncFieldsFromSettings();
+
+  function parseOverride(input) {
+    if (input.value === "" || input.value === null) return null;
+    const value = Number(input.value);
+    return Number.isFinite(value) ? value : null;
+  }
+
+  fields.eloK.addEventListener("input", () => {
+    settings.eloK = Number(fields.eloK.value);
+    document.querySelector("#eloK-value").textContent = settings.eloK;
+    saveSettings();
+    debouncedRun();
+  });
+  fields.maxNudge.addEventListener("input", () => {
+    settings.maxNudge = Number(fields.maxNudge.value);
+    document.querySelector("#maxNudge-value").textContent = settings.maxNudge;
+    saveSettings();
+    debouncedRun();
+  });
+  fields.minResults.addEventListener("input", () => {
+    const value = Number(fields.minResults.value);
+    if (Number.isFinite(value) && value >= 0) {
+      settings.minResults = value;
+      saveSettings();
+      debouncedRun();
+    }
+  });
+  ["goalRatingDivisor", "hostBonusScale", "baseGoalsScale"].forEach((key) => {
+    fields[key].addEventListener("input", () => {
+      settings.calibrationOverride[key] = parseOverride(fields[key]);
+      saveSettings();
+      debouncedRun();
+    });
+  });
+
+  document.querySelector("#settings-reset-calibration").addEventListener("click", () => {
+    settings.calibrationOverride = { goalRatingDivisor: null, hostBonusScale: null, baseGoalsScale: null };
+    saveSettings();
+    syncFieldsFromSettings();
+    debouncedRun();
+  });
+  document.querySelector("#settings-reset-all").addEventListener("click", () => {
+    settings = { ...DEFAULT_SETTINGS, calibrationOverride: { ...DEFAULT_SETTINGS.calibrationOverride } };
+    saveSettings();
+    syncFieldsFromSettings();
+    debouncedRun();
+  });
+
+  // ---- Team modal ----
+  const teamModal = document.querySelector("#team-modal");
+  const teamModalBody = document.querySelector("#team-modal-body");
+  const teamModalTitle = document.querySelector("#team-modal-title");
+  document.querySelector("#team-modal-close").addEventListener("click", () => teamModal.close());
+  teamModal.addEventListener("click", (event) => {
+    const rect = teamModal.getBoundingClientRect();
+    if (event.clientX < rect.left || event.clientX > rect.right || event.clientY < rect.top || event.clientY > rect.bottom) {
+      teamModal.close();
+    }
+  });
+
+  function openTeamModal(teamName) {
+    if (!latestResult) return;
+    const probabilityRow = latestResult.probabilities.find((row) => row.team === teamName);
+    if (!probabilityRow) return;
+    const teamRecord = teamsWithContext.find((team) => team.name === teamName) || {};
+    const ciStr = (p, low, high) => {
+      const half = ((high - low) / 2) * 100;
+      return `${(p * 100).toFixed(1)}% <small class="ci-band">±${half.toFixed(1)}</small>`;
+    };
+    const ratingLine = teamRecord.ratingDelta
+      ? `${teamRecord.baseRating} → ${teamRecord.rating} <small>(${teamRecord.ratingDelta > 0 ? "+" : ""}${teamRecord.ratingDelta} from results)</small>`
+      : `${teamRecord.rating || probabilityRow.rating}`;
+    const adjustments = teamRecord.adjustments || {};
+    const contextRows = ["form", "squad", "injuries", "fatigue", "chemistry"]
+      .map((key) => {
+        const value = Number(adjustments[key] || 0);
+        return value !== 0 ? `<li>${key}: <strong>${value > 0 ? "+" : ""}${value}</strong></li>` : "";
+      })
+      .filter(Boolean);
+    if (teamRecord.restAdjustment) {
+      contextRows.push(`<li>rest: <strong>${teamRecord.restAdjustment > 0 ? "+" : ""}${teamRecord.restAdjustment}</strong></li>`);
+    }
+    const h2hRows = Object.entries(teamRecord.h2hVs || {}).map(([opp, bias]) => `<li>${opp}: <strong>${bias > 0 ? "+" : ""}${bias}</strong></li>`);
+    const matchForecasts = latestResult.groupMatchForecasts
+      .filter((forecast) => forecast.teamA === teamName || forecast.teamB === teamName)
+      .map((forecast) => {
+        const isForward = forecast.teamA === teamName;
+        return `
+          <article class="modal-match">
+            <div class="modal-match-head">
+              <strong>${forecast.teamA} vs ${forecast.teamB}</strong>
+              <span>Group ${forecast.group}</span>
+            </div>
+            <div class="modal-match-row">
+              <span>${(isForward ? forecast.teamAWin : forecast.teamBWin) * 100 | 0}% win</span>
+              <span>Draw ${(forecast.draw * 100).toFixed(0)}%</span>
+              <span>${(isForward ? forecast.teamBWin : forecast.teamAWin) * 100 | 0}% loss</span>
+            </div>
+            ${renderFactorBreakdown(forecast, isForward)}
+          </article>
+        `;
+      })
+      .join("");
+
+    teamModalTitle.textContent = teamName;
+    teamModalBody.innerHTML = `
+      <section class="modal-stats">
+        <div><span class="stat-label">Rating</span><strong>${ratingLine}</strong></div>
+        <div><span class="stat-label">Group</span><strong>${probabilityRow.group}</strong></div>
+        <div><span class="stat-label">Advance</span><strong>${ciStr(probabilityRow.advanceFromGroup, probabilityRow.advanceFromGroupLow, probabilityRow.advanceFromGroupHigh)}</strong></div>
+        <div><span class="stat-label">Reach Final</span><strong>${ciStr(probabilityRow.reachFinal, probabilityRow.reachFinalLow, probabilityRow.reachFinalHigh)}</strong></div>
+        <div><span class="stat-label">Win Cup</span><strong>${ciStr(probabilityRow.winTournament, probabilityRow.winTournamentLow, probabilityRow.winTournamentHigh)}</strong></div>
+      </section>
+      ${contextRows.length ? `<section><h4>Context modifiers</h4><ul class="modal-list">${contextRows.join("")}</ul></section>` : ""}
+      ${h2hRows.length ? `<section><h4>Head-to-head biases</h4><ul class="modal-list">${h2hRows.join("")}</ul></section>` : ""}
+      <section><h4>Group-stage forecasts</h4>${matchForecasts || "<p>No forecasts available.</p>"}</section>
+    `;
+    if (typeof teamModal.showModal === "function") teamModal.showModal();
+    else teamModal.setAttribute("open", "");
+  }
+
+  // ---- Sortable + filterable top table ----
+  const ALL_CONFEDS = ["UEFA", "CONMEBOL", "CONCACAF", "CAF", "AFC", "OFC"];
+  const tableState = {
+    sortColumn: "winTournament",
+    sortDirection: "desc",
+    confederations: new Set(ALL_CONFEDS)
+  };
+
+  renderConfedFilters();
+
+  document.querySelectorAll("#top-table thead th[data-sort]").forEach((th) => {
+    th.addEventListener("click", () => {
+      const column = th.dataset.sort;
+      if (tableState.sortColumn === column) {
+        tableState.sortDirection = tableState.sortDirection === "asc" ? "desc" : "asc";
+      } else {
+        tableState.sortColumn = column;
+        tableState.sortDirection = column === "team" || column === "group" ? "asc" : "desc";
+      }
+      if (latestResult) renderTopTable(latestResult);
+    });
+  });
+
+  document.querySelector("#confed-filters").addEventListener("click", (event) => {
+    const target = event.target.closest("[data-confed]");
+    if (!target) return;
+    const key = target.dataset.confed;
+    if (tableState.confederations.has(key)) {
+      tableState.confederations.delete(key);
+    } else {
+      tableState.confederations.add(key);
+    }
+    target.classList.toggle("active");
+    if (latestResult) renderTopTable(latestResult);
+  });
+
+  topTable.addEventListener("click", (event) => {
+    const target = event.target.closest("[data-team]");
+    if (!target) return;
+    openTeamModal(target.dataset.team);
+  });
+
   run();
 }
 
